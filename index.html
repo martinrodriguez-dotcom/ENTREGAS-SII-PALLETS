@@ -5,19 +5,27 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#065f46" />
-    <link rel="manifest" href="/manifest.json" /> <!-- Sin /public/ -->
+    <meta name="description" content="Sistema de gestión de entregas y carga de pallets" />
+    
+    <!-- Enlace al manifiesto para que sea instalable -->
+    <link rel="manifest" href="/manifest.json" />
+    
     <title>ENTREGAS SII PALLETS</title>
   </head>
   <body>
+    <!-- Contenedor donde React montará la app -->
     <div id="root"></div>
+    
+    <!-- Carga del script principal de la aplicación -->
     <script type="module" src="/src/main.jsx"></script>
+
+    <!-- Registro del Service Worker -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          // Registra el sw.js que estará en la raíz del 'dist' tras compilar
           navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('SW registrado', reg))
-            .catch(err => console.log('Error SW', err));
+            .then(reg => console.log('Service Worker registrado con éxito:', reg.scope))
+            .catch(err => console.error('Fallo al registrar el Service Worker:', err));
         });
       }
     </script>
