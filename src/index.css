@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Evita el color azul al tocar elementos en móviles (Tap highlight) */
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  /* Asegura que el scroll sea fluido en iOS */
+  -webkit-overflow-scrolling: touch;
+  background-color: #f8fafc; /* Slate-50 */
+}
+
+/* Optimización para que la PWA ocupe toda la pantalla visual */
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Estilo para ocultar la barra de scroll en el modal si es necesario */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
