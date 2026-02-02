@@ -1,0 +1,71 @@
+const functions = require('firebase-functions');
+const admin = require('firebase-admin');
+admin.initializeApp();
+
+/**
+ * Esta función se activa cada vez que se crea un documento en la colección 'loads'.
+ * Envía una notificación push a todos los usuarios suscritos al tema "entregas".
+ */
+exports.notifyNewLoad = functions.firestore
+    .document('artifacts/entregas-sii-pallets/public/data/loads/{loadId}')
+    .onCreate(async (snap, context) => {
+        const newValue = snap.data();
+        const customer = newValue.customer || 'Desconocido';
+        const pallets = newValue.pallets || '0';
+        const transport = newValue.transport || '';
+
+        // Título y cuerpo base
+        let title = "📦 Nueva Carga Registrada";
+        let body = `Cliente: ${customer.toUpperCase()} | Pallets: ${pallets}`;
+
+        // Alerta especial si falta el flete
+        if (!transport || transport.trim() === "") {
+            title = "⚠️ URGENTE: Falta asignar flete";
+            body = `Carga para ${customer.toUpperCase()} sin transporte asignado.`;
+        }
+
+        const message = {
+            notification: {
+                title: title,
+                body: body,
+            },
+            topic: 'entregas', // Todos los que tengan la APK se deben suscribir a este "topic"
+            android: {
+                notification: {
+                    color: '#065f46',
+                    sound: 'default',
+                },
+            },
+        };
+
+        try {
+            await admin.messaging().send(message);
+            console.log('Notificación enviada con éxito');
+        } catch (error) {
+            console.error('Error enviando notificación:', error);
+        }
+    });
+
+/**
+ * Esta función se activa cuando se cambia el estado de una carga.
+ */
+exports.notifyStatusChange = functions.firestore
+    .document('artifacts/entregas-sii-pallets/public/data/loads/{loadId}')
+    .onUpdate(async (change, context) => {
+        const oldStatus = change.before.data().status;
+        const newStatus = change.after.data().status;
+        const customer = change.after.data().customer;
+
+        if (oldStatus !== newStatus) {
+            const message = {
+                notification: {
+                    title: `✅ Estado: ${newStatus.toUpperCase()}`,
+                    body: `La entrega de ${customer.toUpperCase()} ha sido actualizada.`,
+                },
+                topic: 'entregas',
+            };
+
+            return admin.messaging().send(message);
+        }
+        return null;
+    });
