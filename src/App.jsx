@@ -19,7 +19,7 @@ import {
   ChevronLeft, ChevronRight, Clock, Hash, Trash2, 
   Edit3, BarChart3, Search, ListOrdered, Save, Cloud, 
   Share2, Copy, Check, LayoutDashboard, Bell, BellRing, 
-  AlertTriangle, Eye, ListFilter, CalendarDays, ArrowRight
+  AlertTriangle, Eye, ListFilter, CalendarDays, ArrowRight, AlertCircle
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE TU FIREBASE ---
@@ -47,10 +47,11 @@ const App = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [loads, setLoads] = useState([]);
   
-  // Nuevos estados para vistas y detalles
-  const [viewLoad, setViewLoad] = useState(null); // Modal de detalle
-  const [showUpcoming, setShowUpcoming] = useState(false); // Listado 15 días
-  const [quickStatusLoad, setQuickStatusLoad] = useState(null); // Selector de estado rápido
+  // Estados para vistas y detalles
+  const [viewLoad, setViewLoad] = useState(null); 
+  const [showUpcoming, setShowUpcoming] = useState(false); 
+  const [showAlerts, setShowAlerts] = useState(false); // Modal de Alertas Internas
+  const [quickStatusLoad, setQuickStatusLoad] = useState(null); 
   const [shareLoad, setShareLoad] = useState(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [notifStatus, setNotifStatus] = useState('default');
@@ -91,6 +92,41 @@ const App = () => {
     });
     return () => unsubscribe();
   }, [user]);
+
+  // --- LÓGICA DE ALERTAS INTERNAS ---
+  const internalAlerts = useMemo(() => {
+    const alerts = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const fiveDaysLater = new Date(today);
+    fiveDaysLater.setDate(today.getDate() + 5);
+
+    loads.forEach(load => {
+      const loadDate = new Date(load.date);
+      
+      // 1. Alerta por proximidad (5 días)
+      if (loadDate >= today && loadDate <= fiveDaysLater && load.status !== 'Entregado') {
+        alerts.push({
+          type: 'proximity',
+          title: 'Entrega Próxima',
+          message: `${load.customer} el día ${load.date}`,
+          loadId: load.id
+        });
+      }
+
+      // 2. Alerta por falta de datos (Flete o campos obligatorios)
+      if (!load.transport || load.transport.trim() === "") {
+        alerts.push({
+          type: 'missing_data',
+          title: 'Falta Asignar Flete',
+          message: `La carga de ${load.customer} no tiene transporte asignado.`,
+          loadId: load.id
+        });
+      }
+    });
+
+    return alerts;
+  }, [loads]);
 
   const handleNotificationRequest = async () => {
     if (!("Notification" in window)) return;
@@ -133,14 +169,11 @@ const App = () => {
     }
   };
 
-  // Filtrado para los próximos 15 días
   const upcomingLoads = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const limit = new Date();
     limit.setDate(today.getDate() + 15);
-    limit.setHours(23, 59, 59, 999);
-
     return loads
       .filter(l => {
         const loadDate = new Date(l.date);
@@ -185,7 +218,7 @@ const App = () => {
     });
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-emerald-900 text-white font-black uppercase tracking-widest">SII PALLETS...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center bg-emerald-900 text-white font-black uppercase tracking-widest text-center px-4">ENTREGAS SII PALLETS<br/><span className="text-[10px] font-bold opacity-50 uppercase tracking-widest mt-2">Cargando sistema...</span></div>;
 
   return (
     <div className="min-h-screen bg-slate-100 md:py-8 lg:py-12">
@@ -202,10 +235,14 @@ const App = () => {
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={handleNotificationRequest}
-                className={`p-3 rounded-2xl border border-white/10 active:scale-95 transition-all relative
-                  ${notifStatus === 'granted' ? 'bg-amber-500 text-white shadow-lg' : 'bg-emerald-700/50 text-emerald-100'}`}>
-                {notifStatus === 'granted' ? <BellRing size={20} /> : <Bell size={20} />}
+              <button onClick={() => setShowAlerts(true)}
+                className="p-3 rounded-2xl border border-white/10 bg-emerald-700/50 text-emerald-100 active:scale-95 transition-all relative">
+                <Bell size={20} />
+                {internalAlerts.length > 0 && (
+                  <span className="absolute top-2 right-2 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-emerald-800 animate-bounce">
+                    {internalAlerts.length}
+                  </span>
+                )}
               </button>
             </div>
           </div>
@@ -242,7 +279,7 @@ const App = () => {
             </div>
           </div>
 
-          {/* DASHBOARD CON BOTÓN PRÓXIMAS */}
+          {/* DASHBOARD */}
           <div className="mt-8 grid grid-cols-1 gap-4 mb-6">
             <button onClick={() => setShowUpcoming(true)} 
               className="bg-indigo-600 text-white p-5 rounded-[2rem] shadow-lg flex items-center justify-between group active:scale-[0.98] transition-all">
@@ -277,37 +314,47 @@ const App = () => {
 
           {/* LISTADO DE ENTREGAS DEL DÍA */}
           <div className="space-y-4 pb-12">
-            {filteredDayLoads.map(load => (
-              <div key={load.id} className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden group">
-                <div className="p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex-1" onClick={() => setViewLoad(load)}>
-                      <button onClick={(e) => { e.stopPropagation(); setQuickStatusLoad(load); }}
-                        className={`text-[8px] font-black uppercase px-2 py-1 rounded-full transition-colors ${
-                          load.status === 'Completado' ? 'bg-emerald-100 text-emerald-700' : 
-                          load.status === 'En Proceso' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
-                        }`}>
-                        {load.status}
-                      </button>
-                      <h4 className="font-black text-slate-900 text-lg uppercase mt-2 leading-tight flex items-center gap-2">
-                        {load.customer} <Eye size={14} className="text-slate-300" />
-                      </h4>
+            {filteredDayLoads.map(load => {
+              const needsFreight = !load.transport || load.transport.trim() === "";
+              return (
+                <div key={load.id} 
+                  className={`bg-white rounded-[2.5rem] shadow-sm border overflow-hidden group transition-all
+                    ${needsFreight ? 'border-rose-300 ring-2 ring-rose-50' : 'border-slate-100'}`}>
+                  <div className="p-6 relative">
+                    {needsFreight && (
+                      <div className="absolute top-6 right-16 bg-rose-500 text-white text-[8px] font-black uppercase px-2 py-1 rounded-md animate-pulse">
+                        Falta Flete
+                      </div>
+                    )}
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1" onClick={() => setViewLoad(load)}>
+                        <button onClick={(e) => { e.stopPropagation(); setQuickStatusLoad(load); }}
+                          className={`text-[8px] font-black uppercase px-2 py-1 rounded-full transition-colors ${
+                            load.status === 'Entregado' ? 'bg-emerald-100 text-emerald-700' : 
+                            load.status === 'En Proceso' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                          }`}>
+                          {load.status}
+                        </button>
+                        <h4 className="font-black text-slate-900 text-lg uppercase mt-2 leading-tight flex items-center gap-2">
+                          {load.customer} <Eye size={14} className="text-slate-300" />
+                        </h4>
+                      </div>
+                      <div className="flex gap-1">
+                        <button onClick={() => setShareLoad(load)} className="p-2 text-slate-300 hover:text-emerald-500"><Share2 size={18} /></button>
+                        <button onClick={() => { setEditingId(load.id); setNewLoad(load); setShowForm(true); }} className="p-2 text-slate-300 hover:text-emerald-600"><Edit3 size={18} /></button>
+                        <button onClick={() => deleteLoad(load.id)} className="p-2 text-slate-300 hover:text-rose-500"><Trash2 size={18} /></button>
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <button onClick={() => setShareLoad(load)} className="p-2 text-slate-300 hover:text-emerald-500"><Share2 size={18} /></button>
-                      <button onClick={() => { setEditingId(load.id); setNewLoad(load); setShowForm(true); }} className="p-2 text-slate-300 hover:text-emerald-600"><Edit3 size={18} /></button>
-                      <button onClick={() => deleteLoad(load.id)} className="p-2 text-slate-300 hover:text-rose-500"><Trash2 size={18} /></button>
+                    <div className="grid grid-cols-2 gap-3 text-[10px] font-bold text-slate-500 mb-2" onClick={() => setViewLoad(load)}>
+                      <div className="flex items-center gap-2 truncate"><Hash size={12} className="text-emerald-500" /> OC: {load.poNumber || '-'}</div>
+                      <div className="flex items-center gap-2"><ListOrdered size={12} className="text-amber-500" /> Turno: {load.turnNumber || '-'}</div>
+                      <div className="flex items-center gap-2"><Package size={12} className="text-emerald-500" /> {load.pallets} Plts</div>
+                      <div className="flex items-center gap-2"><Clock size={12} className="text-slate-400" /> {load.time} HS</div>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 text-[10px] font-bold text-slate-500 mb-2" onClick={() => setViewLoad(load)}>
-                    <div className="flex items-center gap-2 truncate"><Hash size={12} className="text-emerald-500" /> OC: {load.poNumber || '-'}</div>
-                    <div className="flex items-center gap-2"><ListOrdered size={12} className="text-amber-500" /> Turno: {load.turnNumber || '-'}</div>
-                    <div className="flex items-center gap-2"><Package size={12} className="text-emerald-500" /> {load.pallets} Plts</div>
-                    <div className="flex items-center gap-2"><Clock size={12} className="text-slate-400" /> {load.time} HS</div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </main>
 
@@ -317,6 +364,48 @@ const App = () => {
             <Plus size={24} className="stroke-[4px]" /><span className="font-black text-sm uppercase tracking-tight">NUEVA CARGA</span>
           </button>
         </div>
+
+        {/* MODAL DE ALERTAS INTERNAS */}
+        {showAlerts && (
+          <div className="absolute inset-0 bg-slate-900/90 z-[110] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in">
+            <div className="bg-white w-full max-h-[70vh] rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
+              <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-rose-50">
+                <div>
+                  <h2 className="text-xl font-black text-rose-900 uppercase leading-none">Alertas del Sistema</h2>
+                  <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mt-1">Pendientes de Acción</p>
+                </div>
+                <button onClick={() => setShowAlerts(false)} className="p-3 bg-white rounded-2xl shadow-sm text-slate-400"><X size={20} /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-3 hide-scrollbar">
+                {internalAlerts.length > 0 ? (
+                  internalAlerts.map((alert, i) => (
+                    <div key={i} 
+                      onClick={() => {
+                        const targetLoad = loads.find(l => l.id === alert.loadId);
+                        if (targetLoad) setViewLoad(targetLoad);
+                        setShowAlerts(false);
+                      }}
+                      className={`p-4 rounded-3xl border flex items-start gap-4 active:scale-[0.98] transition-all
+                        ${alert.type === 'proximity' ? 'bg-amber-50 border-amber-100' : 'bg-rose-50 border-rose-100'}`}>
+                      <div className={`p-2 rounded-xl ${alert.type === 'proximity' ? 'text-amber-600 bg-white' : 'text-rose-600 bg-white'}`}>
+                        {alert.type === 'proximity' ? <CalendarIcon size={20} /> : <AlertCircle size={20} />}
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-black uppercase text-slate-900 leading-tight">{alert.title}</p>
+                        <p className="text-[10px] font-bold text-slate-500 mt-1">{alert.message}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-20">
+                    <Check className="mx-auto text-emerald-500 mb-2" size={40} />
+                    <p className="text-slate-400 font-black uppercase text-xs">Sin alertas pendientes</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* MODAL PRÓXIMAS ENTREGAS (15 DÍAS) */}
         {showUpcoming && (
@@ -382,14 +471,16 @@ const App = () => {
                   </div>
                   <div className="bg-slate-50 p-4 rounded-3xl">
                     <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Estado</p>
-                    <p className="text-sm font-black uppercase">{viewLoad.status}</p>
+                    <p className="text-sm font-black uppercase text-indigo-600">{viewLoad.status}</p>
                   </div>
                 </div>
                 <div className="space-y-4">
                   <div>
                     <p className="text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest flex items-center gap-2"><Truck size={12} /> Logística</p>
-                    <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
-                      <p className="text-sm font-bold text-slate-800 mb-1">{viewLoad.transport || 'Transporte no especificado'}</p>
+                    <div className={`p-4 rounded-3xl border ${!viewLoad.transport ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+                      <p className={`text-sm font-bold mb-1 ${!viewLoad.transport ? 'text-rose-600' : 'text-slate-800'}`}>
+                        {viewLoad.transport || '⚠️ FLETE NO ASIGNADO'}
+                      </p>
                       <p className="text-xs text-slate-500 italic leading-relaxed">{viewLoad.condition || 'Sin observaciones de equipo.'}</p>
                     </div>
                   </div>
@@ -424,10 +515,10 @@ const App = () => {
             <div className="bg-white w-full rounded-[3rem] shadow-2xl p-8 animate-in zoom-in-95">
               <h3 className="text-center font-black text-slate-400 text-[10px] uppercase mb-6 tracking-widest italic">Cambiar Estado de Entrega</h3>
               <div className="space-y-3">
-                {['Pendiente', 'En Proceso', 'Completado'].map(s => (
+                {['Pendiente', 'En Proceso', 'Entregado'].map(s => (
                   <button key={s} onClick={() => updateQuickStatus(quickStatusLoad.id, s)}
                     className={`w-full py-5 rounded-3xl font-black uppercase text-xs transition-all border-4 
-                      ${quickStatusLoad.status === s ? 'bg-emerald-800 border-emerald-800 text-white' : 'bg-slate-50 border-slate-50 text-slate-400'}`}>
+                      ${quickStatusLoad.status === s ? 'bg-emerald-800 border-emerald-800 text-white shadow-lg' : 'bg-slate-50 border-slate-50 text-slate-400'}`}>
                     {s}
                   </button>
                 ))}
@@ -456,7 +547,7 @@ const App = () => {
           </div>
         )}
 
-        {/* MODAL FORMULARIO (EDICIÓN/NUEVO) */}
+        {/* MODAL FORMULARIO */}
         {showForm && (
           <div className="absolute inset-0 bg-slate-900/90 z-[60] flex items-end justify-center backdrop-blur-sm animate-in fade-in px-2 md:px-4">
             <div className="bg-white w-full rounded-t-[3.5rem] shadow-2xl p-8 overflow-y-auto max-h-[92%] animate-in slide-in-from-bottom duration-500 hide-scrollbar">
@@ -465,7 +556,7 @@ const App = () => {
                 <button onClick={() => setShowForm(false)} className="p-4 bg-slate-100 rounded-[1.5rem] text-slate-400"><X size={24} /></button>
               </div>
               <form onSubmit={saveLoad} className="space-y-6 pb-12">
-                <div className="flex gap-2">{['Pendiente', 'En Proceso', 'Completado'].map(s => (
+                <div className="flex gap-2">{['Pendiente', 'En Proceso', 'Entregado'].map(s => (
                   <button key={s} type="button" onClick={() => setNewLoad({...newLoad, status: s})} className={`flex-1 py-3 rounded-2xl text-[9px] font-black uppercase border-2 transition-all ${newLoad.status === s ? 'bg-emerald-800 border-emerald-800 text-white shadow-md' : 'bg-white text-slate-300 border-slate-50'}`}>{s}</button>
                 ))}</div>
                 <div className="grid grid-cols-2 gap-4">
@@ -480,8 +571,8 @@ const App = () => {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <input type="number" placeholder="Pallets" required value={newLoad.pallets} onChange={e => setNewLoad({...newLoad, pallets: e.target.value})} className="bg-emerald-50 border-none rounded-2xl p-4 text-sm font-black" />
-                  <input type="text" placeholder="Transporte" value={newLoad.transport} onChange={e => setNewLoad({...newLoad, transport: e.target.value})} className="bg-emerald-50 border-none rounded-2xl p-4 text-sm font-black" />
+                  <input type="number" placeholder="Pallets" required value={newLoad.pallets} onChange={e => setNewLoad({...newLoad, pallets: e.target.value})} className={`bg-emerald-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-emerald-500`} />
+                  <input type="text" placeholder="Transporte / Flete" value={newLoad.transport} onChange={e => setNewLoad({...newLoad, transport: e.target.value})} className={`bg-emerald-50 border-none rounded-2xl p-4 text-sm font-black focus:ring-2 focus:ring-emerald-500 ${!newLoad.transport ? 'ring-2 ring-rose-200 ring-offset-1' : ''}`} />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Lista de Artículos</label>
