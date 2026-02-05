@@ -49,9 +49,10 @@ const App = () => {
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
                       "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-  // Estados de Modales
+  // Estados de Modales y Vistas
   const [showForm, setShowForm] = useState(false);
   const [showOCForm, setShowOCForm] = useState(false);
+  const [showOCPicker, setShowOCPicker] = useState(false);
   const [ocSuccess, setOcSuccess] = useState(null);
   const [viewLoad, setViewLoad] = useState(null); 
   const [shareLoad, setShareLoad] = useState(null);
@@ -59,6 +60,7 @@ const App = () => {
   const [showAlerts, setShowAlerts] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
+  const [selectedInternalOCId, setSelectedInternalOCId] = useState(null); 
   const [searchQuery, setSearchQuery] = useState("");
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [notifStatus, setNotifStatus] = useState('default');
@@ -84,15 +86,12 @@ const App = () => {
     articles: [{ name: "", qty: "" }]
   });
 
-  // REGLA 3: Autenticación
+  // --- AUTENTICACIÓN ---
   useEffect(() => {
+    if ("Notification" in window) setNotifStatus(Notification.permission);
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (err) {
         console.error("Auth error:", err);
       }
@@ -107,26 +106,25 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  // REGLA 1: Sincronización real
+  // --- SINCRONIZACIÓN FIRESTORE ---
   useEffect(() => {
     if (!user || !authInitialized) return;
 
     const loadsRef = collection(db, 'artifacts', appId, 'public', 'data', 'loads');
     const ocsRef = collection(db, 'artifacts', appId, 'public', 'data', 'internal_ocs');
 
-    const unsubLoads = onSnapshot(loadsRef, 
-      (snap) => setLoads(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))),
-      (err) => console.error("Error Loads Sync:", err)
-    );
+    const unsubLoads = onSnapshot(loadsRef, (snap) => {
+      setLoads(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => console.error("Error Loads Sync:", err));
 
-    const unsubOCs = onSnapshot(ocsRef, 
-      (snap) => setInternalOCs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))),
-      (err) => console.error("Error OCs Sync:", err)
-    );
+    const unsubOCs = onSnapshot(ocsRef, (snap) => {
+      setInternalOCs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => console.error("Error OCs Sync:", err));
 
     return () => { unsubLoads(); unsubOCs(); };
   }, [user, authInitialized]);
 
+  // --- ALERTAS ---
   const internalAlerts = useMemo(() => {
     const alerts = [];
     const today = new Date();
@@ -158,6 +156,7 @@ const App = () => {
     }
   };
 
+  // --- LÓGICA DE CORRELATIVIDAD ---
   const nextOCNumber = useMemo(() => {
     if (internalOCs.length === 0) return "0001";
     const nums = internalOCs.map(o => parseInt(o.ocNumber)).filter(n => !isNaN(n));
@@ -165,15 +164,50 @@ const App = () => {
     return (max + 1).toString().padStart(4, '0');
   }, [internalOCs]);
 
+  // Lista de OCs disponibles (no usadas)
+  const availableOCs = useMemo(() => {
+    return internalOCs.filter(oc => oc.isUsed !== true).sort((a, b) => b.ocNumber.localeCompare(a.ocNumber));
+  }, [internalOCs]);
+
+  // --- ACCIONES DE AUTOCOMPLETADO ---
+  const selectOC = (oc) => {
+    // Calculamos el total de pallets sumando las cantidades de los artículos de la OC
+    const totalPallets = oc.articles.reduce((sum, art) => sum + (Number(art.qty) || 0), 0);
+
+    setNewLoad({
+      ...initialLoadState,
+      customer: oc.customer,
+      poNumber: oc.ocNumber,
+      date: oc.date,
+      // Se completa en el campo principal de cantidad
+      pallets: totalPallets > 0 ? totalPallets.toString() : "",
+      // Adaptamos el detalle al formato de la entrega (name -> name, qty -> feature)
+      articles: oc.articles.map(a => ({ name: a.name, feature: a.qty }))
+    });
+    setSelectedInternalOCId(oc.id);
+    setShowOCPicker(false);
+  };
+
   const handleSaveLoad = async (e) => {
     e.preventDefault();
     if (!user) return;
     const id = editingId || Date.now().toString();
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'loads', id);
-    await setDoc(docRef, { ...newLoad, id, updatedAt: new Date().toISOString() });
-    setShowForm(false);
-    setEditingId(null);
-    setNewLoad(initialLoadState);
+    
+    try {
+      await setDoc(docRef, { ...newLoad, id, updatedAt: new Date().toISOString() });
+      
+      // Anulación de la OC al usarla en una carga
+      if (selectedInternalOCId) {
+        const ocRef = doc(db, 'artifacts', appId, 'public', 'data', 'internal_ocs', selectedInternalOCId);
+        await updateDoc(ocRef, { isUsed: true });
+      }
+
+      setShowForm(false);
+      setEditingId(null);
+      setSelectedInternalOCId(null);
+      setNewLoad(initialLoadState);
+    } catch (err) { console.error(err); }
   };
 
   const handleGenerateOC = async (e) => {
@@ -181,7 +215,7 @@ const App = () => {
     if (!user) return;
     const ocNumber = nextOCNumber;
     const id = Date.now().toString();
-    const ocData = { ...newOC, id, ocNumber, createdAt: new Date().toISOString() };
+    const ocData = { ...newOC, id, ocNumber, isUsed: false, createdAt: new Date().toISOString() };
     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'internal_ocs', id), ocData);
     setOcSuccess(ocData);
     setShowOCForm(false);
@@ -255,7 +289,7 @@ const App = () => {
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 -mr-16 -mt-16 rounded-full"></div>
         <div className="flex justify-between items-start mb-6 relative z-10">
           <div>
-            <h1 className="text-2xl font-black tracking-tighter uppercase leading-none italic">SII PALLETS</h1>
+            <h1 className="text-2xl font-black tracking-tighter uppercase leading-none italic text-white">SII PALLETS</h1>
             <div className="flex items-center gap-2 text-[10px] font-bold text-emerald-200 bg-emerald-900/40 px-3 py-1 rounded-full mt-3 w-fit border border-emerald-500/20">
               <Cloud size={10} className="animate-pulse" /> NUBE CONECTADA
             </div>
@@ -271,19 +305,18 @@ const App = () => {
         </div>
 
         <div className="flex justify-between items-center bg-white/10 backdrop-blur-md p-2 rounded-2xl border border-white/10">
-          <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-2 active:scale-90 transition-all"><ChevronLeft size={20} /></button>
-          <h2 className="text-xs font-black uppercase tracking-widest">{monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}</h2>
-          <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-2 active:scale-90 transition-all"><ChevronRight size={20} /></button>
+          <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-2 active:scale-90 transition-all text-white"><ChevronLeft size={20} /></button>
+          <h2 className="text-xs font-black uppercase tracking-widest text-white">{monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}</h2>
+          <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-2 active:scale-90 transition-all text-white"><ChevronRight size={20} /></button>
         </div>
       </header>
 
-      {/* MAIN DASHBOARD */}
+      {/* DASHBOARD PRINCIPAL */}
       <main className="px-5 -mt-6 relative z-20">
         
         {/* CALENDARIO */}
         <div className="bg-white rounded-[2.5rem] shadow-xl p-6 border border-slate-100 mb-8">
           <div className="grid grid-cols-7 gap-1 text-center mb-4 text-[9px] font-black text-slate-300 uppercase">
-            {/* CORRECCIÓN: Usando 'i' correctamente en lugar de 'idx' inexistente */}
             {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, i) => <div key={`cal-hdr-${d}-${i}`}>{d}</div>)}
           </div>
           <div className="grid grid-cols-7 gap-2">
@@ -306,7 +339,6 @@ const App = () => {
           </div>
         </div>
 
-        {/* ACCIONES RÁPIDAS */}
         <div className="grid grid-cols-2 gap-4 mb-8">
            <button onClick={() => { setEditingId(null); setNewLoad(initialLoadState); setShowForm(true); }}
             className="bg-emerald-800 text-white p-5 rounded-[2rem] shadow-lg flex flex-col items-center gap-2 active:scale-95 transition-all">
@@ -320,17 +352,15 @@ const App = () => {
            </button>
         </div>
 
-        {/* BUSCADOR */}
         <div className="relative mb-8">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
           <input type="text" placeholder="Buscar Cliente u OC..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-white border-2 border-slate-50 rounded-3xl py-4 pl-14 pr-6 shadow-sm text-sm font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all" />
         </div>
 
-        {/* LISTADO DE ENTREGAS */}
         <div className="space-y-4">
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-4 mb-2 flex items-center gap-2 italic">
-            <ClipboardList className="w-4 h-4" /> Hoja de Ruta del Día
+            <ClipboardList className="w-4 h-4" /> Hoja de Ruta - {selectedDate.toLocaleDateString()}
           </h3>
           {filteredDayLoads.length > 0 ? filteredDayLoads.map(load => {
             const needsFreight = !load.transport || load.transport.trim() === "";
@@ -374,7 +404,7 @@ const App = () => {
                 {load.articles && load.articles.length > 0 && load.articles[0].name && (
                   <div className="border-t border-slate-50 pt-3 mt-1">
                     <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-2 flex items-center gap-1 italic">
-                      <ListFilter size={10} /> Productos en Carga:
+                      <ListFilter size={10} /> Detalle de Productos:
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {load.articles.map((art, artIdx) => (
@@ -397,24 +427,57 @@ const App = () => {
         </div>
       </main>
 
-      {/* --- MODAL: ALERTAS DE SISTEMA (CORREGIDO) --- */}
+      {/* --- MODAL: SELECTOR OC PENDIENTES --- */}
+      {showOCPicker && (
+        <div className="fixed inset-0 bg-slate-900/80 z-[200] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
+            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-indigo-50">
+              <div>
+                <h2 className="text-xl font-black text-indigo-900 uppercase italic">OC Internas Pendientes</h2>
+                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1 italic">Selecciona para autocompletar</p>
+              </div>
+              <button onClick={() => setShowOCPicker(false)} className="p-3 bg-white rounded-2xl text-slate-400 active:scale-90"><X size={20} /></button>
+            </div>
+            <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto hide-scrollbar">
+              {availableOCs.length > 0 ? availableOCs.map((oc) => (
+                <div key={`picker-oc-${oc.id}`} onClick={() => selectOC(oc)}
+                  className="bg-white border-2 border-slate-50 p-5 rounded-[2rem] flex items-center justify-between cursor-pointer hover:border-indigo-500 hover:shadow-lg transition-all group active:scale-[0.98]">
+                  <div className="flex items-center gap-5">
+                    <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                      <FileText size={24} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase text-slate-900 leading-tight">{oc.customer}</p>
+                      <p className="text-[10px] font-bold text-indigo-500 mt-1 uppercase">OC #{oc.ocNumber} • {oc.date}</p>
+                    </div>
+                  </div>
+                  <ArrowRight size={20} className="text-slate-200 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                </div>
+              )) : (
+                <div className="text-center py-10">
+                   <p className="text-xs font-black text-slate-300 uppercase tracking-widest italic">No hay OCs pendientes</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ALERTAS */}
       {showAlerts && (
         <div className="fixed inset-0 bg-slate-900/90 z-[160] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in">
           <div className="bg-white w-full max-w-lg rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-rose-50/50">
-              <div>
-                <h2 className="text-xl font-black text-rose-900 uppercase italic">Notificaciones</h2>
-                <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mt-1">Monitoreo SII Pallets</p>
-              </div>
-              <button onClick={() => setShowAlerts(false)} className="p-4 bg-white rounded-2xl text-slate-400 transition-colors active:scale-90"><X size={20} /></button>
+              <h2 className="text-xl font-black text-rose-900 uppercase italic tracking-tighter">Notificaciones</h2>
+              <button onClick={() => setShowAlerts(false)} className="p-4 bg-white rounded-2xl text-slate-400 active:scale-90 transition-all"><X size={20} /></button>
             </div>
-            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto hide-scrollbar">
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto hide-scrollbar text-center">
               <button onClick={handleNotificationRequest} className="w-full py-4 bg-emerald-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest mb-2 active:scale-95 transition-all">
                 {notifStatus === 'granted' ? 'Notificaciones Activas ✅' : 'Activar Alertas Push'}
               </button>
               {internalAlerts.length > 0 ? internalAlerts.map((alert, i) => (
                 <div key={`alert-list-item-${alert.id}-${i}`} onClick={() => { setViewLoad(loads.find(l => l.id === alert.loadId)); setShowAlerts(false); }}
-                  className={`p-5 rounded-3xl border-2 flex items-center gap-5 cursor-pointer hover:scale-[1.02] transition-all
+                  className={`p-5 rounded-3xl border-2 flex items-center gap-5 cursor-pointer text-left hover:scale-[1.02] transition-all
                   ${alert.type === 'proximity' ? 'bg-amber-50 border-amber-100' : 'bg-rose-50 border-rose-100'}`}>
                   <div className={`p-4 rounded-2xl shadow-sm ${alert.type === 'proximity' ? 'bg-white text-amber-600' : 'bg-white text-rose-600'}`}>
                     {alert.type === 'proximity' ? <CalendarIcon size={24} /> : <AlertCircle size={24} />}
@@ -425,9 +488,9 @@ const App = () => {
                   </div>
                 </div>
               )) : (
-                <div className="text-center py-10">
+                <div className="py-10">
                    <Check size={40} className="mx-auto text-emerald-500 mb-2" />
-                   <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Todo bajo control</p>
+                   <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Sin alertas pendientes</p>
                 </div>
               )}
             </div>
@@ -435,8 +498,7 @@ const App = () => {
         </div>
       )}
 
-      {/* --- EL RESTO DE LOS MODALES SE MANTIENEN IGUAL (YA ESTABAN ESTABLES) --- */}
-      {/* OC Form, Success, Delivery Form, Status Selector, Detail View, etc... */}
+      {/* MODAL: NUEVA OC */}
       {showOCForm && (
         <div className="fixed inset-0 bg-slate-900/90 z-[100] flex items-end justify-center backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md rounded-t-[3.5rem] shadow-2xl p-8 overflow-y-auto max-h-[95vh] animate-in slide-in-from-bottom-10 duration-500">
@@ -456,11 +518,11 @@ const App = () => {
               </div>
               <div className="space-y-4">
                  <div className="flex justify-between items-center px-2">
-                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Artículos</h3>
+                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Detalle de Productos</h3>
                    <button type="button" onClick={() => setNewOC({...newOC, articles: [...newOC.articles, {name:"", qty:""}]})} className="bg-indigo-600 text-white p-2 rounded-xl active:scale-90 shadow-md transition-all"><Plus size={18} /></button>
                  </div>
                  {newOC.articles.map((art, idx) => (
-                    <div key={`oc-row-it-${idx}`} className="flex gap-2 animate-in slide-in-from-left-2">
+                    <div key={`oc-new-row-${idx}`} className="flex gap-2 animate-in slide-in-from-left-2">
                        <input type="text" placeholder="Producto" required value={art.name} onChange={e => { const u = [...newOC.articles]; u[idx].name = e.target.value; setNewOC({...newOC, articles: u}); }} className="flex-1 bg-slate-50 border-none rounded-2xl p-4 text-xs font-black uppercase shadow-inner" />
                        <input type="text" placeholder="Cant." required value={art.qty} onChange={e => { const u = [...newOC.articles]; u[idx].qty = e.target.value; setNewOC({...newOC, articles: u}); }} className="w-24 bg-slate-50 border-none rounded-2xl p-4 text-xs font-black uppercase text-center shadow-inner" />
                        {newOC.articles.length > 1 && <button type="button" onClick={() => {const u = [...newOC.articles]; u.splice(idx, 1); setNewOC({...newOC, articles: u});}} className="p-2 text-rose-300 active:scale-75 transition-all"><Trash2 size={18}/></button>}
@@ -475,6 +537,7 @@ const App = () => {
         </div>
       )}
 
+      {/* MODAL: ÉXITO OC */}
       {ocSuccess && (
         <div className="fixed inset-0 bg-slate-900/95 z-[150] flex items-center justify-center p-6 backdrop-blur-md animate-in zoom-in-95">
           <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl p-10 flex flex-col items-center text-center">
@@ -490,17 +553,18 @@ const App = () => {
         </div>
       )}
 
+      {/* MODAL: FORMULARIO ENTREGA */}
       {showForm && (
         <div className="fixed inset-0 bg-slate-900/90 z-[100] flex items-end justify-center backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md rounded-t-[3.5rem] shadow-2xl p-8 overflow-y-auto max-h-[92%] animate-in slide-in-from-bottom-10 duration-500">
             <div className="flex justify-between items-center mb-8 sticky top-0 bg-white py-2 z-10 border-b border-slate-50">
               <h2 className="text-2xl font-black text-slate-800 uppercase italic tracking-tighter">{editingId ? 'Editar' : 'Nueva'} Entrega</h2>
-              <button onClick={() => setShowForm(false)} className="p-4 bg-slate-100 rounded-[1.5rem] text-slate-400 active:scale-90 transition-all"><X size={24} /></button>
+              <button onClick={() => { setShowForm(false); setSelectedInternalOCId(null); }} className="p-4 bg-slate-100 rounded-[1.5rem] text-slate-400 active:scale-90 transition-all"><X size={24} /></button>
             </div>
             <form onSubmit={handleSaveLoad} className="space-y-6">
               <div className="flex gap-2">
                 {['Pendiente', 'En Proceso', 'Entregado'].map(s => (
-                  <button key={`st-btn-form-${s}`} type="button" onClick={() => setNewLoad({...newLoad, status: s})} 
+                  <button key={`status-btn-${s}`} type="button" onClick={() => setNewLoad({...newLoad, status: s})} 
                     className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase border-2 transition-all 
                     ${newLoad.status === s ? 'bg-emerald-800 border-emerald-800 text-white shadow-xl shadow-emerald-100' : 'bg-white text-slate-300 border-slate-50 hover:border-slate-100'}`}>{s}</button>
                 ))}
@@ -510,10 +574,27 @@ const App = () => {
                 <input type="time" required value={newLoad.time} onChange={e => setNewLoad({...newLoad, time: e.target.value})} className="bg-slate-50 border-none rounded-2xl p-4 text-sm font-black shadow-inner" />
               </div>
               <input type="text" placeholder="Cliente / Destino" required value={newLoad.customer} onChange={e => setNewLoad({...newLoad, customer: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-black uppercase shadow-inner" />
+              
               <div className="grid grid-cols-2 gap-4">
                 <input type="text" placeholder="Turno N°" required value={newLoad.turnNumber} onChange={e => setNewLoad({...newLoad, turnNumber: e.target.value})} className="bg-slate-50 border-none rounded-2xl p-5 text-sm font-black text-emerald-600 shadow-inner" />
-                <input type="text" placeholder="OC-" value={newLoad.poNumber} onChange={e => setNewLoad({...newLoad, poNumber: e.target.value})} className="bg-slate-50 border-none rounded-2xl p-5 text-sm font-black uppercase shadow-inner" />
+                
+                {/* CAMPO OC CON SELECTOR */}
+                <div className="relative">
+                   <input type="text" placeholder="OC-" value={newLoad.poNumber} onChange={e => setNewLoad({...newLoad, poNumber: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-black uppercase shadow-inner pr-12" />
+                   <button type="button" onClick={() => setShowOCPicker(true)} 
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 text-white rounded-xl shadow-md active:scale-90 transition-all">
+                      <ListFilter size={18} />
+                   </button>
+                </div>
               </div>
+              
+              {selectedInternalOCId && (
+                <div className="bg-indigo-50 p-3 rounded-2xl border border-indigo-100 flex items-center justify-between">
+                   <p className="text-[9px] font-black text-indigo-700 uppercase italic">Datos vinculados de OC Interna</p>
+                   <button type="button" onClick={() => { setSelectedInternalOCId(null); setNewLoad({...newLoad, poNumber: ""}); }} className="text-indigo-400 p-1 hover:text-indigo-600"><X size={14}/></button>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <input type="number" placeholder="Pallets" required value={newLoad.pallets} onChange={e => setNewLoad({...newLoad, pallets: e.target.value})} className="bg-slate-50 border-none rounded-2xl p-5 text-sm font-black shadow-inner" />
                 <input type="text" placeholder="Flete" value={newLoad.transport} onChange={e => setNewLoad({...newLoad, transport: e.target.value})} className="bg-slate-50 border-none rounded-2xl p-5 text-sm font-black shadow-inner" />
@@ -527,7 +608,8 @@ const App = () => {
                  {newLoad.articles.map((art, idx) => (
                     <div key={`edit-art-ln-${idx}`} className="flex gap-2">
                        <input type="text" placeholder="Producto" required value={art.name} onChange={e => { const u = [...newLoad.articles]; u[idx].name = e.target.value; setNewLoad({...newLoad, articles: u}); }} className="flex-1 bg-slate-50 border-none rounded-2xl p-4 text-[11px] font-black uppercase shadow-inner" />
-                       <input type="text" placeholder="Obs" value={art.feature} onChange={e => { const u = [...newLoad.articles]; u[idx].feature = e.target.value; setNewLoad({...newLoad, articles: u}); }} className="w-24 bg-slate-50 border-none rounded-2xl p-4 text-[11px] font-black uppercase text-center shadow-inner" />
+                       {/* CORREGIDO: placeholder de 'Obs' a 'Cant.' para evitar confusión */}
+                       <input type="text" placeholder="Cant." value={art.feature} onChange={e => { const u = [...newLoad.articles]; u[idx].feature = e.target.value; setNewLoad({...newLoad, articles: u}); }} className="w-24 bg-slate-50 border-none rounded-2xl p-4 text-[11px] font-black uppercase text-center shadow-inner" />
                        {newLoad.articles.length > 1 && <button type="button" onClick={() => {const u = [...newLoad.articles]; u.splice(idx, 1); setNewLoad({...newLoad, articles: u});}} className="p-2 text-rose-300 active:scale-75 transition-all"><Trash2 size={18}/></button>}
                     </div>
                  ))}
@@ -542,7 +624,7 @@ const App = () => {
       {quickStatusLoad && (
         <div className="fixed inset-0 bg-slate-900/60 z-[150] flex items-center justify-center p-12 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-xs rounded-[3rem] shadow-2xl p-8 animate-in zoom-in-95">
-            <h3 className="text-center font-black text-slate-400 text-[10px] uppercase mb-8 tracking-widest italic leading-relaxed">Actualizar Estado</h3>
+            <h3 className="text-center font-black text-slate-400 text-[10px] uppercase mb-8 tracking-widest italic leading-relaxed">Actualizar Proceso</h3>
             <div className="space-y-4">
               {['Pendiente', 'En Proceso', 'Entregado'].map(s => (
                 <button key={`quick-opt-sel-${s}`} onClick={() => updateQuickStatus(quickStatusLoad.id, s)}
@@ -605,7 +687,7 @@ const App = () => {
                 <p className="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest italic">Productos</p>
                 <div className="space-y-2">
                    {viewLoad.articles?.map((art, i) => (
-                      <div key={`view-art-it-${i}`} className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm flex justify-between items-center transition-all hover:bg-slate-50">
+                      <div key={`view-art-line-${i}`} className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm flex justify-between items-center transition-all hover:bg-slate-50">
                          <span className="text-xs font-black uppercase text-slate-800">{art.name}</span>
                          <span className="text-[10px] font-bold text-slate-400 italic">{art.feature}</span>
                       </div>
@@ -634,7 +716,7 @@ const App = () => {
             </div>
             <button onClick={() => copyToClipboard(formatWhatsAppMessage(shareLoad))}
               className={`w-full py-7 rounded-[2.5rem] font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-4 transition-all shadow-xl ${copyFeedback ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-200' : 'bg-emerald-800 text-white active:scale-95'}`}>
-              {copyFeedback ? '¡COPIADO!' : 'COPIAR PARA WHATSAPP'}
+              {copyFeedback ? '¡MENSAJE COPIADO!' : 'COPIAR PARA WHATSAPP'}
             </button>
           </div>
         </div>
