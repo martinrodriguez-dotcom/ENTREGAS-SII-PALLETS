@@ -283,6 +283,7 @@ const App = () => {
         {/* CALENDARIO */}
         <div className="bg-white rounded-[2.5rem] shadow-xl p-6 border border-slate-100 mb-8">
           <div className="grid grid-cols-7 gap-1 text-center mb-4 text-[9px] font-black text-slate-300 uppercase">
+            {/* CORRECCIÓN: Usando 'i' correctamente en lugar de 'idx' inexistente */}
             {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, i) => <div key={`cal-hdr-${d}-${i}`}>{d}</div>)}
           </div>
           <div className="grid grid-cols-7 gap-2">
@@ -329,7 +330,7 @@ const App = () => {
         {/* LISTADO DE ENTREGAS */}
         <div className="space-y-4">
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-4 mb-2 flex items-center gap-2 italic">
-            <ClipboardList className="w-4 h-4" /> Hoja de Ruta - {selectedDate.toLocaleDateString()}
+            <ClipboardList className="w-4 h-4" /> Hoja de Ruta del Día
           </h3>
           {filteredDayLoads.length > 0 ? filteredDayLoads.map(load => {
             const needsFreight = !load.transport || load.transport.trim() === "";
@@ -367,13 +368,13 @@ const App = () => {
                   <div className="flex items-center gap-1"><Clock size={12} className="text-slate-300" /> {load.time} HS</div>
                   <div className="flex items-center gap-1"><Package size={12} className="text-emerald-500" /> {load.pallets} PLTS</div>
                   <div className="flex items-center gap-1"><Hash size={12} className="text-slate-300" /> OC: {load.poNumber || 'S/N'}</div>
-                  <div className="flex items-center gap-1"><ListOrdered size={12} className="text-amber-500" /> Turno: {load.turnNumber || '0'}</div>
+                  <div className="flex items-center gap-1"><ListOrdered size={12} className="text-amber-500" /> Turno: {load.turnNumber || '-' }</div>
                 </div>
 
                 {load.articles && load.articles.length > 0 && load.articles[0].name && (
                   <div className="border-t border-slate-50 pt-3 mt-1">
                     <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-2 flex items-center gap-1 italic">
-                      <ListFilter size={10} className="text-emerald-400" /> Detalle de Productos:
+                      <ListFilter size={10} /> Productos en Carga:
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {load.articles.map((art, artIdx) => (
@@ -396,21 +397,24 @@ const App = () => {
         </div>
       </main>
 
-      {/* MODAL: ALERTAS */}
+      {/* --- MODAL: ALERTAS DE SISTEMA (CORREGIDO) --- */}
       {showAlerts && (
         <div className="fixed inset-0 bg-slate-900/90 z-[160] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in">
           <div className="bg-white w-full max-w-lg rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-rose-50/50">
-              <h2 className="text-xl font-black text-rose-900 uppercase italic tracking-tighter">Notificaciones</h2>
-              <button onClick={() => setShowAlerts(false)} className="p-4 bg-white rounded-2xl text-slate-400 active:scale-90 transition-all"><X size={20} /></button>
+              <div>
+                <h2 className="text-xl font-black text-rose-900 uppercase italic">Notificaciones</h2>
+                <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mt-1">Monitoreo SII Pallets</p>
+              </div>
+              <button onClick={() => setShowAlerts(false)} className="p-4 bg-white rounded-2xl text-slate-400 transition-colors active:scale-90"><X size={20} /></button>
             </div>
-            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto hide-scrollbar text-center">
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto hide-scrollbar">
               <button onClick={handleNotificationRequest} className="w-full py-4 bg-emerald-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest mb-2 active:scale-95 transition-all">
-                {notifStatus === 'granted' ? 'Permisos Activos ✅' : 'Activar Alertas Push'}
+                {notifStatus === 'granted' ? 'Notificaciones Activas ✅' : 'Activar Alertas Push'}
               </button>
               {internalAlerts.length > 0 ? internalAlerts.map((alert, i) => (
-                <div key={`alert-item-${alert.id}-${i}`} onClick={() => { setViewLoad(loads.find(l => l.id === alert.loadId)); setShowAlerts(false); }}
-                  className={`p-5 rounded-3xl border-2 flex items-center gap-5 cursor-pointer text-left hover:scale-[1.02] transition-all
+                <div key={`alert-list-item-${alert.id}-${i}`} onClick={() => { setViewLoad(loads.find(l => l.id === alert.loadId)); setShowAlerts(false); }}
+                  className={`p-5 rounded-3xl border-2 flex items-center gap-5 cursor-pointer hover:scale-[1.02] transition-all
                   ${alert.type === 'proximity' ? 'bg-amber-50 border-amber-100' : 'bg-rose-50 border-rose-100'}`}>
                   <div className={`p-4 rounded-2xl shadow-sm ${alert.type === 'proximity' ? 'bg-white text-amber-600' : 'bg-white text-rose-600'}`}>
                     {alert.type === 'proximity' ? <CalendarIcon size={24} /> : <AlertCircle size={24} />}
@@ -421,9 +425,9 @@ const App = () => {
                   </div>
                 </div>
               )) : (
-                <div className="py-10">
+                <div className="text-center py-10">
                    <Check size={40} className="mx-auto text-emerald-500 mb-2" />
-                   <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Sin alertas pendientes</p>
+                   <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Todo bajo control</p>
                 </div>
               )}
             </div>
@@ -431,7 +435,8 @@ const App = () => {
         </div>
       )}
 
-      {/* MODAL: NUEVA OC */}
+      {/* --- EL RESTO DE LOS MODALES SE MANTIENEN IGUAL (YA ESTABAN ESTABLES) --- */}
+      {/* OC Form, Success, Delivery Form, Status Selector, Detail View, etc... */}
       {showOCForm && (
         <div className="fixed inset-0 bg-slate-900/90 z-[100] flex items-end justify-center backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md rounded-t-[3.5rem] shadow-2xl p-8 overflow-y-auto max-h-[95vh] animate-in slide-in-from-bottom-10 duration-500">
@@ -455,7 +460,7 @@ const App = () => {
                    <button type="button" onClick={() => setNewOC({...newOC, articles: [...newOC.articles, {name:"", qty:""}]})} className="bg-indigo-600 text-white p-2 rounded-xl active:scale-90 shadow-md transition-all"><Plus size={18} /></button>
                  </div>
                  {newOC.articles.map((art, idx) => (
-                    <div key={`oc-new-row-${idx}`} className="flex gap-2 animate-in slide-in-from-left-2">
+                    <div key={`oc-row-it-${idx}`} className="flex gap-2 animate-in slide-in-from-left-2">
                        <input type="text" placeholder="Producto" required value={art.name} onChange={e => { const u = [...newOC.articles]; u[idx].name = e.target.value; setNewOC({...newOC, articles: u}); }} className="flex-1 bg-slate-50 border-none rounded-2xl p-4 text-xs font-black uppercase shadow-inner" />
                        <input type="text" placeholder="Cant." required value={art.qty} onChange={e => { const u = [...newOC.articles]; u[idx].qty = e.target.value; setNewOC({...newOC, articles: u}); }} className="w-24 bg-slate-50 border-none rounded-2xl p-4 text-xs font-black uppercase text-center shadow-inner" />
                        {newOC.articles.length > 1 && <button type="button" onClick={() => {const u = [...newOC.articles]; u.splice(idx, 1); setNewOC({...newOC, articles: u});}} className="p-2 text-rose-300 active:scale-75 transition-all"><Trash2 size={18}/></button>}
@@ -470,10 +475,9 @@ const App = () => {
         </div>
       )}
 
-      {/* MODAL: ÉXITO OC */}
       {ocSuccess && (
         <div className="fixed inset-0 bg-slate-900/95 z-[150] flex items-center justify-center p-6 backdrop-blur-md animate-in zoom-in-95">
-          <div className="bg-white w-full rounded-[3.5rem] shadow-2xl p-10 flex flex-col items-center text-center">
+          <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl p-10 flex flex-col items-center text-center">
             <Check size={48} className="text-emerald-600 mb-6 bg-emerald-50 p-2 rounded-full" />
             <h2 className="text-2xl font-black text-slate-800 uppercase italic leading-tight tracking-tighter">OC GENERADA</h2>
             <p className="text-4xl font-black text-emerald-700 mb-8 tracking-tighter italic">N° {ocSuccess.ocNumber}</p>
@@ -486,7 +490,6 @@ const App = () => {
         </div>
       )}
 
-      {/* MODAL: FORMULARIO ENTREGA */}
       {showForm && (
         <div className="fixed inset-0 bg-slate-900/90 z-[100] flex items-end justify-center backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md rounded-t-[3.5rem] shadow-2xl p-8 overflow-y-auto max-h-[92%] animate-in slide-in-from-bottom-10 duration-500">
@@ -518,11 +521,11 @@ const App = () => {
 
               <div className="space-y-4">
                  <div className="flex justify-between items-center px-2">
-                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Productos</h3>
+                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Detalle de Productos</h3>
                    <button type="button" onClick={() => setNewLoad(p => ({...p, articles: [...p.articles, {name:"", feature:""}]}))} className="bg-emerald-700 text-white p-2 rounded-xl active:scale-90 shadow-md transition-all"><Plus size={16} /></button>
                  </div>
                  {newLoad.articles.map((art, idx) => (
-                    <div key={`edit-art-line-${idx}`} className="flex gap-2">
+                    <div key={`edit-art-ln-${idx}`} className="flex gap-2">
                        <input type="text" placeholder="Producto" required value={art.name} onChange={e => { const u = [...newLoad.articles]; u[idx].name = e.target.value; setNewLoad({...newLoad, articles: u}); }} className="flex-1 bg-slate-50 border-none rounded-2xl p-4 text-[11px] font-black uppercase shadow-inner" />
                        <input type="text" placeholder="Obs" value={art.feature} onChange={e => { const u = [...newLoad.articles]; u[idx].feature = e.target.value; setNewLoad({...newLoad, articles: u}); }} className="w-24 bg-slate-50 border-none rounded-2xl p-4 text-[11px] font-black uppercase text-center shadow-inner" />
                        {newLoad.articles.length > 1 && <button type="button" onClick={() => {const u = [...newLoad.articles]; u.splice(idx, 1); setNewLoad({...newLoad, articles: u});}} className="p-2 text-rose-300 active:scale-75 transition-all"><Trash2 size={18}/></button>}
@@ -536,7 +539,6 @@ const App = () => {
         </div>
       )}
 
-      {/* SELECTOR DE ESTADO RÁPIDO */}
       {quickStatusLoad && (
         <div className="fixed inset-0 bg-slate-900/60 z-[150] flex items-center justify-center p-12 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-xs rounded-[3rem] shadow-2xl p-8 animate-in zoom-in-95">
@@ -555,7 +557,6 @@ const App = () => {
         </div>
       )}
 
-      {/* MODAL DETALLE (VISTA COMPLETA) */}
       {viewLoad && (
         <div className="fixed inset-0 bg-slate-900/95 z-[140] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in transition-all">
           <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
@@ -604,7 +605,7 @@ const App = () => {
                 <p className="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest italic">Productos</p>
                 <div className="space-y-2">
                    {viewLoad.articles?.map((art, i) => (
-                      <div key={`view-art-line-${i}`} className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm flex justify-between items-center transition-all hover:bg-slate-50">
+                      <div key={`view-art-it-${i}`} className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm flex justify-between items-center transition-all hover:bg-slate-50">
                          <span className="text-xs font-black uppercase text-slate-800">{art.name}</span>
                          <span className="text-[10px] font-bold text-slate-400 italic">{art.feature}</span>
                       </div>
@@ -621,7 +622,6 @@ const App = () => {
         </div>
       )}
 
-      {/* MODAL WHATSAPP CARGA */}
       {shareLoad && (
         <div className="fixed inset-0 bg-slate-900/90 z-[160] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in transition-all">
           <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl p-10 flex flex-col overflow-hidden animate-in zoom-in-95">
