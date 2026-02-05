@@ -23,24 +23,23 @@ import {
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : {
-      apiKey: "AIzaSyBF-7P8QhcOQb4KnlxacCDkY3-m1ETvhr0",
-      authDomain: "entregas-sii-pallets.firebaseapp.com",
-      projectId: "entregas-sii-pallets",
-      storageBucket: "entregas-sii-pallets.firebasestorage.app",
-      messagingSenderId: "42949067833",
-      appId: "1:42949067833:web:37b0257a9e0b8c2a03e103"
-    };
+const firebaseConfig = {
+  apiKey: "AIzaSyBF-7P8QhcOQb4KnlxacCDkY3-m1ETvhr0",
+  authDomain: "entregas-sii-pallets.firebaseapp.com",
+  projectId: "entregas-sii-pallets",
+  storageBucket: "entregas-sii-pallets.firebasestorage.app",
+  messagingSenderId: "42949067833",
+  appId: "1:42949067833:web:37b0257a9e0b8c2a03e103"
+};
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'entregas-sii-pallets';
+const appId = 'entregas-sii-pallets';
 
 const App = () => {
   const [user, setUser] = useState(null);
+  const [authInitialized, setAuthInitialized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -50,7 +49,7 @@ const App = () => {
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
                       "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-  // Estados de Modales y Vistas
+  // Estados de Modales
   const [showForm, setShowForm] = useState(false);
   const [showOCForm, setShowOCForm] = useState(false);
   const [ocSuccess, setOcSuccess] = useState(null);
@@ -85,10 +84,8 @@ const App = () => {
     articles: [{ name: "", qty: "" }]
   });
 
-  // REGLA 3: Autenticación antes de cualquier consulta
+  // REGLA 3: Iniciar sesión ANTES de cualquier consulta
   useEffect(() => {
-    if ("Notification" in window) setNotifStatus(Notification.permission);
-    
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -97,22 +94,24 @@ const App = () => {
           await signInAnonymously(auth);
         }
       } catch (err) {
-        console.error("Auth Error:", err);
+        console.error("Auth error:", err);
       }
     };
     initAuth();
-    
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthInitialized(true);
+      if (currentUser) setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // REGLA 1: Rutas estrictas de Firestore
+  // REGLA 1: Sincronización real con rutas estrictas
   useEffect(() => {
-    if (!user) return;
-    
+    if (!user || !authInitialized) return;
+
+    // Ruta obligatoria: /artifacts/{appId}/public/data/{collection}
     const loadsRef = collection(db, 'artifacts', appId, 'public', 'data', 'loads');
     const ocsRef = collection(db, 'artifacts', appId, 'public', 'data', 'internal_ocs');
 
@@ -120,20 +119,19 @@ const App = () => {
       (snap) => {
         setLoads(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       },
-      (error) => console.error("Loads Sync Error:", error)
+      (err) => console.error("Error Loads Sync:", err)
     );
-    
+
     const unsubOCs = onSnapshot(ocsRef, 
       (snap) => {
         setInternalOCs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       },
-      (error) => console.error("OCs Sync Error:", error)
+      (err) => console.error("Error OCs Sync:", err)
     );
 
     return () => { unsubLoads(); unsubOCs(); };
-  }, [user]);
+  }, [user, authInitialized]);
 
-  // Alertas Inteligentes
   const internalAlerts = useMemo(() => {
     const alerts = [];
     const today = new Date();
@@ -147,23 +145,11 @@ const App = () => {
         alerts.push({ id: `prox-${load.id}`, type: 'proximity', title: 'Entrega Próxima', message: `${load.customer} - ${load.date}`, loadId: load.id });
       }
       if (!load.transport || load.transport.trim() === "") {
-        alerts.push({ id: `flete-${load.id}`, type: 'missing_data', title: 'Falta Flete', message: `Carga de ${load.customer} sin transporte.`, loadId: load.id });
+        alerts.push({ id: `flete-${load.id}`, type: 'missing_data', title: 'Falta Flete', message: `Carga de ${load.customer} sin flete.`, loadId: load.id });
       }
     });
     return alerts;
   }, [loads]);
-
-  const handleNotificationRequest = async () => {
-    if (!("Notification" in window)) return;
-    const permission = await Notification.requestPermission();
-    setNotifStatus(permission);
-    if (permission === "granted") {
-      new Notification("🔔 SII Pallets: ¡Activado!", {
-        body: "Recibirás alertas sobre tus cargas y entregas.",
-        icon: "/logo192.png"
-      });
-    }
-  };
 
   const nextOCNumber = useMemo(() => {
     if (internalOCs.length === 0) return "0001";
@@ -177,12 +163,10 @@ const App = () => {
     if (!user) return;
     const id = editingId || Date.now().toString();
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'loads', id);
-    try {
-      await setDoc(docRef, { ...newLoad, id, updatedAt: new Date().toISOString() });
-      setShowForm(false);
-      setEditingId(null);
-      setNewLoad(initialLoadState);
-    } catch (e) { console.error(e); }
+    await setDoc(docRef, { ...newLoad, id, updatedAt: new Date().toISOString() });
+    setShowForm(false);
+    setEditingId(null);
+    setNewLoad(initialLoadState);
   };
 
   const handleGenerateOC = async (e) => {
@@ -191,12 +175,10 @@ const App = () => {
     const ocNumber = nextOCNumber;
     const id = Date.now().toString();
     const ocData = { ...newOC, id, ocNumber, createdAt: new Date().toISOString() };
-    try {
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'internal_ocs', id), ocData);
-      setOcSuccess(ocData);
-      setShowOCForm(false);
-      setNewOC({ customer: "", date: new Date().toISOString().split('T')[0], turn: "", articles: [{ name: "", qty: "" }] });
-    } catch (e) { console.error(e); }
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'internal_ocs', id), ocData);
+    setOcSuccess(ocData);
+    setShowOCForm(false);
+    setNewOC({ customer: "", date: new Date().toISOString().split('T')[0], turn: "", articles: [{ name: "", qty: "" }] });
   };
 
   const updateQuickStatus = async (id, newStatus) => {
@@ -214,36 +196,7 @@ const App = () => {
 
   const printOC = (oc) => {
     const printWindow = window.open('', '_blank');
-    const content = `
-      <html>
-        <head>
-          <title>Orden de Compra ${oc.ocNumber}</title>
-          <style>
-            body { font-family: sans-serif; padding: 40px; color: #333; line-height: 1.6; }
-            .header { text-align: center; border-bottom: 3px solid #065f46; padding-bottom: 20px; margin-bottom: 30px; }
-            .details { margin-bottom: 30px; display: grid; grid-template-cols: 1fr 1fr; gap: 20px; }
-            .table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            .table th, .table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-            .table th { background: #f8fafc; font-weight: bold; }
-            .footer { margin-top: 60px; font-size: 11px; text-align: center; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
-            h1 { color: #065f46; margin: 0; }
-          </style>
-        </head>
-        <body>
-          <div class="header"><h1>ORDEN DE COMPRA INTERNA</h1><p style="font-weight: bold;">SII PALLETS LOGÍSTICA</p></div>
-          <div class="details">
-            <div><p><strong>N° OC:</strong> #${oc.ocNumber}</p><p><strong>Cliente:</strong> ${oc.customer.toUpperCase()}</p></div>
-            <div style="text-align: right;"><p><strong>Fecha:</strong> ${oc.date}</p><p><strong>Turno/Ref:</strong> ${oc.turn || 'N/A'}</p></div>
-          </div>
-          <table class="table">
-            <thead><tr><th>Producto</th><th style="text-align:center;">Detalle/Cantidad</th></tr></thead>
-            <tbody>${oc.articles.map(a => `<tr><td>${a.name.toUpperCase()}</td><td style="text-align:center;">${a.qty}</td></tr>`).join('')}</tbody>
-          </table>
-          <div class="footer">Documento generado por el Sistema SII Pallets - ${new Date().toLocaleString()}</div>
-          <script>window.onload = function() { window.print(); window.close(); }</script>
-        </body>
-      </html>
-    `;
+    const content = `<html><head><title>OC ${oc.ocNumber}</title><style>body{font-family:sans-serif;padding:40px;color:#333;}.header{text-align:center;border-bottom:2px solid #065f46;padding-bottom:20px;}.details{margin-top:30px;display:grid;grid-template-cols:1fr 1fr;gap:20px;}.table{width:100%;border-collapse:collapse;margin-top:20px;}.table th,.table td{border:1px solid #ddd;padding:12px;text-align:left;}.table th{background:#f4f4f4;}.footer{margin-top:50px;font-size:11px;text-align:center;color:#94a3b8;}</style></head><body><div class="header"><h1>ORDEN DE COMPRA INTERNA</h1><p>SII PALLETS LOGÍSTICA</p></div><div class="details"><div><p><strong>N° OC:</strong> #${oc.ocNumber}</p><p><strong>Cliente:</strong> ${oc.customer.toUpperCase()}</p></div><div style="text-align:right;"><p><strong>Fecha:</strong> ${oc.date}</p><p><strong>Turno/Ref:</strong> ${oc.turn || 'N/A'}</p></div></div><table class="table"><thead><tr><th>Producto</th><th>Detalle/Cantidad</th></tr></thead><tbody>${oc.articles.map(a => `<tr><td>${a.name.toUpperCase()}</td><td>${a.qty}</td></tr>`).join('')}</tbody></table><div class="footer">Generado por SII Pallets - ${new Date().toLocaleString()}</div><script>window.onload=function(){window.print();window.close();}</script></body></html>`;
     printWindow.document.write(content);
     printWindow.document.close();
   };
@@ -285,7 +238,7 @@ const App = () => {
     return loads.filter(l => l.date === dateStr && (l.customer.toLowerCase().includes(searchQuery.toLowerCase()) || (l.poNumber && l.poNumber.toLowerCase().includes(searchQuery.toLowerCase()))));
   }, [loads, selectedDate, searchQuery]);
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-emerald-900 text-white font-black uppercase tracking-widest text-center italic">SII PALLETS...</div>;
+  if (loading && !authInitialized) return <div className="h-screen flex items-center justify-center bg-emerald-900 text-white font-black uppercase tracking-widest text-center italic">CONECTANDO A SII PALLETS...</div>;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 pb-24 overflow-x-hidden antialiased">
@@ -296,8 +249,8 @@ const App = () => {
         <div className="flex justify-between items-start mb-6 relative z-10">
           <div>
             <h1 className="text-2xl font-black tracking-tighter uppercase leading-none italic">SII PALLETS</h1>
-            <div className="flex items-center gap-2 text-[10px] font-bold text-emerald-200 bg-emerald-900/40 px-3 py-1 rounded-full mt-3 w-fit">
-              <Cloud size={10} className="animate-pulse" /> SINCRO NUBE OK
+            <div className="flex items-center gap-2 text-[10px] font-bold text-emerald-200 bg-emerald-900/40 px-3 py-1 rounded-full mt-3 w-fit border border-emerald-500/20">
+              <Cloud size={10} className="animate-pulse" /> NUBE CONECTADA
             </div>
           </div>
           <button onClick={() => setShowAlerts(true)} className="p-3 bg-white/10 rounded-2xl border border-white/10 active:scale-95 transition-all relative">
@@ -317,13 +270,13 @@ const App = () => {
         </div>
       </header>
 
-      {/* MAIN DASHBOARD */}
+      {/* DASHBOARD PRINCIPAL */}
       <main className="px-5 -mt-6 relative z-20">
         
         {/* CALENDARIO */}
         <div className="bg-white rounded-[2.5rem] shadow-xl p-6 border border-slate-100 mb-8">
           <div className="grid grid-cols-7 gap-1 text-center mb-4 text-[9px] font-black text-slate-300 uppercase">
-            {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, i) => <div key={`hdr-d-${i}`}>{d}</div>)}
+            {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, i) => <div key={`cal-hdr-${d}-${i}`}>{d}</div>)}
           </div>
           <div className="grid grid-cols-7 gap-2">
             {calendarDays.map((date, idx) => {
@@ -331,10 +284,10 @@ const App = () => {
               const isSelected = date && dStr === selectedDate.toISOString().split('T')[0];
               const hasEvents = date && loads.some(l => l.date === dStr);
               return (
-                <button key={`cal-day-${idx}`} disabled={!date} onClick={() => setSelectedDate(date)}
+                <button key={`cal-btn-${dStr}-${idx}`} disabled={!date} onClick={() => setSelectedDate(date)}
                   className={`h-10 rounded-2xl flex flex-col items-center justify-center relative transition-all
                     ${!date ? 'opacity-0' : 'opacity-100'}
-                    ${isSelected ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-105' : 'bg-slate-50 text-slate-400 active:scale-95'}
+                    ${isSelected ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' : 'bg-slate-50 text-slate-400 active:scale-95'}
                   `}
                 >
                   <span className="text-xs font-black">{date?.getDate()}</span>
@@ -369,12 +322,12 @@ const App = () => {
         {/* LISTADO DE ENTREGAS */}
         <div className="space-y-4">
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-4 mb-2 flex items-center gap-2 italic">
-            <ClipboardList className="w-4 h-4" /> Hoja de Ruta - {selectedDate.toLocaleDateString()}
+            <ClipboardList className="w-4 h-4" /> Hoja de Ruta del Día
           </h3>
           {filteredDayLoads.length > 0 ? filteredDayLoads.map(load => {
             const needsFreight = !load.transport || load.transport.trim() === "";
             return (
-              <div key={`load-${load.id}`} 
+              <div key={`load-card-${load.id}`} 
                 className={`bg-white p-6 rounded-[2.5rem] shadow-sm border relative group transition-all duration-500
                 ${needsFreight ? 'border-rose-300 ring-4 ring-rose-50 animate-[pulse_3s_infinite]' : 'border-slate-100 hover:border-emerald-100'}`} 
                 onClick={() => setViewLoad(load)}>
@@ -386,14 +339,14 @@ const App = () => {
                         load.status === 'Entregado' ? 'bg-emerald-100 text-emerald-700' : 
                         load.status === 'En Proceso' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
                       }`}>{load.status}</button>
-                     <h4 className="font-black text-slate-900 text-lg uppercase mt-2 leading-tight flex items-center gap-2 italic">
+                     <h4 className="font-black text-slate-900 text-lg uppercase mt-2 leading-tight flex items-center gap-2">
                        {load.customer}
                        <Eye size={14} className="text-slate-200" />
                      </h4>
                    </div>
                    <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => { setEditingId(load.id); setNewLoad(load); setShowForm(true); }} className="p-2 text-slate-300 hover:text-blue-500 active:scale-110 transition-all"><Edit3 size={18} /></button>
-                      <button onClick={() => deleteLoad(load.id)} className="p-2 text-slate-300 hover:text-rose-500 active:scale-110 transition-all"><Trash2 size={18} /></button>
+                      <button onClick={() => { setEditingId(load.id); setNewLoad(load); setShowForm(true); }} className="p-2 text-slate-200 hover:text-blue-500 active:scale-110 transition-all"><Edit3 size={18} /></button>
+                      <button onClick={() => deleteLoad(load.id)} className="p-2 text-slate-200 hover:text-rose-500 active:scale-110 transition-all"><Trash2 size={18} /></button>
                    </div>
                 </div>
 
@@ -411,13 +364,13 @@ const App = () => {
                 </div>
 
                 {load.articles && load.articles.length > 0 && load.articles[0].name && (
-                  <div className="border-t border-slate-50 pt-4 mt-2">
+                  <div className="border-t border-slate-50 pt-3 mt-1">
                     <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-3 flex items-center gap-1 italic">
-                      <ListFilter size={10} className="text-emerald-400" /> Detalle:
+                      <ListFilter size={10} className="text-emerald-400" /> Detalle de Productos:
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {load.articles.map((art, artIdx) => (
-                        <div key={`${load.id}-art-${artIdx}`} className="bg-slate-100/50 px-3 py-1.5 rounded-xl border border-slate-200/30 flex items-center gap-2">
+                      {load.articles.map((art, idx) => (
+                        <div key={`${load.id}-art-view-${idx}`} className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100 flex items-center gap-2">
                           <span className="text-[9px] font-black uppercase text-slate-700">{art.name}</span>
                           {art.feature && <span className="text-[8px] font-bold text-slate-400 italic">({art.feature})</span>}
                         </div>
@@ -428,29 +381,32 @@ const App = () => {
               </div>
             );
           }) : (
-            <div className="text-center py-16 bg-slate-200/10 rounded-[3rem] border-2 border-dashed border-slate-200 flex flex-col items-center">
+            <div className="text-center py-16 bg-slate-200/20 rounded-[3rem] border-2 border-dashed border-slate-200 flex flex-col items-center">
               <Package size={40} className="text-slate-200 mb-4" />
-              <p className="text-slate-300 font-black uppercase text-[10px] italic tracking-[0.2em]">Sin registros para hoy</p>
+              <p className="text-slate-300 font-black uppercase text-[10px] italic tracking-widest">Sin registros para hoy</p>
             </div>
           )}
         </div>
       </main>
 
-      {/* MODAL: ALERTAS */}
+      {/* --- MODAL: ALERTAS DE SISTEMA --- */}
       {showAlerts && (
         <div className="fixed inset-0 bg-slate-900/90 z-[160] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in">
           <div className="bg-white w-full max-w-lg rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-rose-50/50">
-              <h2 className="text-xl font-black text-rose-900 uppercase italic tracking-tighter">Notificaciones</h2>
-              <button onClick={() => setShowAlerts(false)} className="p-4 bg-white rounded-2xl text-slate-400 active:scale-90 transition-all"><X size={20} /></button>
+              <div>
+                <h2 className="text-xl font-black text-rose-900 uppercase italic">Notificaciones</h2>
+                <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mt-1">Monitoreo SII Pallets</p>
+              </div>
+              <button onClick={() => setShowAlerts(false)} className="p-4 bg-white rounded-2xl text-slate-400 transition-colors active:scale-90"><X size={20} /></button>
             </div>
-            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto hide-scrollbar text-center">
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto hide-scrollbar">
               <button onClick={handleNotificationRequest} className="w-full py-4 bg-emerald-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest mb-2 active:scale-95 transition-all">
-                {notifStatus === 'granted' ? 'Notificaciones Activas ✅' : 'Activar Alertas Push'}
+                {notifStatus === 'granted' ? 'Notificaciones Activas ✅' : 'Activar Notificaciones Push'}
               </button>
               {internalAlerts.length > 0 ? internalAlerts.map((alert, i) => (
-                <div key={`alert-${alert.id}-${i}`} onClick={() => { setViewLoad(loads.find(l => l.id === alert.loadId)); setShowAlerts(false); }}
-                  className={`p-5 rounded-3xl border-2 flex items-center gap-5 cursor-pointer text-left hover:scale-[1.02] transition-all
+                <div key={`alert-list-${alert.id}-${i}`} onClick={() => { setViewLoad(loads.find(l => l.id === alert.loadId)); setShowAlerts(false); }}
+                  className={`p-5 rounded-3xl border-2 flex items-center gap-5 cursor-pointer hover:scale-[1.02] transition-all
                   ${alert.type === 'proximity' ? 'bg-amber-50 border-amber-100' : 'bg-rose-50 border-rose-100'}`}>
                   <div className={`p-4 rounded-2xl shadow-sm ${alert.type === 'proximity' ? 'bg-white text-amber-600' : 'bg-white text-rose-600'}`}>
                     {alert.type === 'proximity' ? <CalendarIcon size={24} /> : <AlertCircle size={24} />}
@@ -461,9 +417,9 @@ const App = () => {
                   </div>
                 </div>
               )) : (
-                <div className="py-10">
+                <div className="text-center py-10">
                    <Check size={40} className="mx-auto text-emerald-500 mb-2" />
-                   <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Sin alertas pendientes</p>
+                   <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Todo bajo control</p>
                 </div>
               )}
             </div>
@@ -478,7 +434,7 @@ const App = () => {
             <div className="flex justify-between items-center mb-8 sticky top-0 bg-white py-2 z-10 border-b border-slate-100">
               <div>
                 <h2 className="text-2xl font-black text-slate-800 uppercase italic">Generar OC</h2>
-                <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1">N° Sugerido: {nextOCNumber}</p>
+                <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1">Correlativo N°: {nextOCNumber}</p>
               </div>
               <button onClick={() => setShowOCForm(false)} className="p-4 bg-slate-100 rounded-[1.5rem] text-slate-400 active:scale-90"><X size={24} /></button>
             </div>
@@ -491,11 +447,11 @@ const App = () => {
               </div>
               <div className="space-y-4">
                  <div className="flex justify-between items-center px-2">
-                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Artículos</h3>
+                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Detalle de Productos</h3>
                    <button type="button" onClick={() => setNewOC({...newOC, articles: [...newOC.articles, {name:"", qty:""}]})} className="bg-indigo-600 text-white p-2 rounded-xl active:scale-90 shadow-md transition-all"><Plus size={18} /></button>
                  </div>
                  {newOC.articles.map((art, idx) => (
-                    <div key={`row-oc-new-${idx}`} className="flex gap-2 animate-in slide-in-from-left-2">
+                    <div key={`oc-row-item-${idx}`} className="flex gap-2 animate-in slide-in-from-left-2">
                        <input type="text" placeholder="Producto" required value={art.name} onChange={e => { const u = [...newOC.articles]; u[idx].name = e.target.value; setNewOC({...newOC, articles: u}); }} className="flex-1 bg-slate-50 border-none rounded-2xl p-4 text-xs font-black uppercase shadow-inner" />
                        <input type="text" placeholder="Cant." required value={art.qty} onChange={e => { const u = [...newOC.articles]; u[idx].qty = e.target.value; setNewOC({...newOC, articles: u}); }} className="w-24 bg-slate-50 border-none rounded-2xl p-4 text-xs font-black uppercase text-center shadow-inner" />
                        {newOC.articles.length > 1 && <button type="button" onClick={() => {const u = [...newOC.articles]; u.splice(idx, 1); setNewOC({...newOC, articles: u});}} className="p-2 text-rose-300 active:scale-75 transition-all"><Trash2 size={18}/></button>}
@@ -513,13 +469,13 @@ const App = () => {
       {/* MODAL: ÉXITO OC */}
       {ocSuccess && (
         <div className="fixed inset-0 bg-slate-900/95 z-[150] flex items-center justify-center p-6 backdrop-blur-md animate-in zoom-in-95">
-          <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl p-10 flex flex-col items-center text-center">
+          <div className="bg-white w-full rounded-[3.5rem] shadow-2xl p-10 flex flex-col items-center text-center">
             <Check size={48} className="text-emerald-600 mb-6 bg-emerald-50 p-2 rounded-full" />
             <h2 className="text-2xl font-black text-slate-800 uppercase italic leading-tight tracking-tighter">OC GENERADA</h2>
-            <p className="text-4xl font-black text-emerald-700 mb-8 tracking-tighter">N° {ocSuccess.ocNumber}</p>
+            <p className="text-4xl font-black text-emerald-700 mb-8 tracking-tighter italic">N° {ocSuccess.ocNumber}</p>
             <div className="grid grid-cols-1 w-full gap-4">
                <button onClick={() => copyToClipboard(formatOCWhatsApp(ocSuccess))} className={`w-full py-5 rounded-[2rem] font-black uppercase text-xs flex items-center justify-center gap-3 transition-all ${copyFeedback ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-200' : 'bg-emerald-800 text-white shadow-xl active:scale-95'}`}>{copyFeedback ? '¡COPIADO!' : 'COPIAR WHATSAPP'}</button>
-               <button onClick={() => printOC(ocSuccess)} className="w-full py-5 bg-slate-50 text-slate-500 rounded-[2rem] font-black uppercase text-xs flex items-center justify-center gap-3 active:bg-slate-100 border-2 border-slate-100">IMPRIMIR / PDF</button>
+               <button onClick={() => printOC(ocSuccess)} className="w-full py-5 bg-slate-50 text-slate-500 rounded-[2rem] font-black uppercase text-xs flex items-center justify-center gap-3 active:bg-slate-100 border-2 border-slate-100 shadow-sm transition-all">IMPRIMIR / PDF</button>
             </div>
             <button onClick={() => setOcSuccess(null)} className="mt-8 text-[10px] font-black text-slate-300 uppercase underline tracking-[0.2em] active:text-slate-500">Cerrar</button>
           </div>
@@ -531,22 +487,22 @@ const App = () => {
         <div className="fixed inset-0 bg-slate-900/90 z-[100] flex items-end justify-center backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md rounded-t-[3.5rem] shadow-2xl p-8 overflow-y-auto max-h-[92%] animate-in slide-in-from-bottom-10 duration-500">
             <div className="flex justify-between items-center mb-8 sticky top-0 bg-white py-2 z-10 border-b border-slate-50">
-              <h2 className="text-2xl font-black text-slate-800 uppercase italic tracking-tighter">{editingId ? 'Editar' : 'Nueva'} Entrega</h2>
+              <h2 className="text-2xl font-black text-slate-800 uppercase italic leading-tight tracking-tighter">{editingId ? 'Editar' : 'Nueva'} Entrega</h2>
               <button onClick={() => setShowForm(false)} className="p-4 bg-slate-100 rounded-[1.5rem] text-slate-400 active:scale-90 transition-all"><X size={24} /></button>
             </div>
             <form onSubmit={handleSaveLoad} className="space-y-6">
               <div className="flex gap-2">
                 {['Pendiente', 'En Proceso', 'Entregado'].map(s => (
-                  <button key={`btn-st-${s}`} type="button" onClick={() => setNewLoad({...newLoad, status: s})} 
+                  <button key={`status-btn-${s}`} type="button" onClick={() => setNewLoad({...newLoad, status: s})} 
                     className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase border-2 transition-all 
-                    ${newLoad.status === s ? 'bg-emerald-800 border-emerald-800 text-white shadow-xl shadow-emerald-100' : 'bg-white text-slate-300 border-slate-50 hover:border-slate-100'}`}>{s}</button>
+                    ${newLoad.status === s ? 'bg-emerald-800 border-emerald-800 text-white shadow-xl' : 'bg-white text-slate-300 border-slate-50 hover:border-slate-100'}`}>{s}</button>
                 ))}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <input type="date" required value={newLoad.date} onChange={e => setNewLoad({...newLoad, date: e.target.value})} className="bg-slate-50 border-none rounded-2xl p-4 text-sm font-black shadow-inner" />
                 <input type="time" required value={newLoad.time} onChange={e => setNewLoad({...newLoad, time: e.target.value})} className="bg-slate-50 border-none rounded-2xl p-4 text-sm font-black shadow-inner" />
               </div>
-              <input type="text" placeholder="Cliente / Destino" required value={newLoad.customer} onChange={e => setNewLoad({...newLoad, customer: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-black uppercase shadow-inner" />
+              <input type="text" placeholder="Cliente / Destino" required value={newLoad.customer} onChange={e => setNewLoad({...newLoad, customer: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-black uppercase placeholder:text-slate-300 shadow-inner" />
               <div className="grid grid-cols-2 gap-4">
                 <input type="text" placeholder="Turno N°" required value={newLoad.turnNumber} onChange={e => setNewLoad({...newLoad, turnNumber: e.target.value})} className="bg-slate-50 border-none rounded-2xl p-5 text-sm font-black text-emerald-600 shadow-inner" />
                 <input type="text" placeholder="OC-" value={newLoad.poNumber} onChange={e => setNewLoad({...newLoad, poNumber: e.target.value})} className="bg-slate-50 border-none rounded-2xl p-5 text-sm font-black uppercase shadow-inner" />
@@ -558,11 +514,11 @@ const App = () => {
 
               <div className="space-y-4">
                  <div className="flex justify-between items-center px-2">
-                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Productos</h3>
-                   <button type="button" onClick={() => setNewLoad(p => ({...p, articles: [...p.articles, {name:"", feature:""}]}))} className="bg-emerald-700 text-white p-2 rounded-xl active:scale-90 shadow-md"><Plus size={16} /></button>
+                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Detalle de Productos</h3>
+                   <button type="button" onClick={() => setNewLoad(p => ({...p, articles: [...p.articles, {name:"", feature:""}]}))} className="bg-emerald-700 text-white p-2 rounded-xl active:scale-90 shadow-md transition-all"><Plus size={16} /></button>
                  </div>
                  {newLoad.articles.map((art, idx) => (
-                    <div key={`edit-art-row-${idx}`} className="flex gap-2">
+                    <div key={`edit-row-idx-${idx}`} className="flex gap-2">
                        <input type="text" placeholder="Producto" required value={art.name} onChange={e => { const u = [...newLoad.articles]; u[idx].name = e.target.value; setNewLoad({...newLoad, articles: u}); }} className="flex-1 bg-slate-50 border-none rounded-2xl p-4 text-[11px] font-black uppercase shadow-inner" />
                        <input type="text" placeholder="Obs" value={art.feature} onChange={e => { const u = [...newLoad.articles]; u[idx].feature = e.target.value; setNewLoad({...newLoad, articles: u}); }} className="w-24 bg-slate-50 border-none rounded-2xl p-4 text-[11px] font-black uppercase shadow-inner" />
                        {newLoad.articles.length > 1 && <button type="button" onClick={() => {const u = [...newLoad.articles]; u.splice(idx, 1); setNewLoad({...newLoad, articles: u});}} className="p-2 text-rose-300 active:scale-75 transition-all"><Trash2 size={18}/></button>}
@@ -570,7 +526,7 @@ const App = () => {
                  ))}
               </div>
 
-              <button type="submit" className="w-full bg-emerald-800 text-white font-black py-6 rounded-[2.5rem] shadow-2xl uppercase tracking-widest text-sm active:scale-95 transition-all"><Save size={20} className="inline mr-2" /> GUARDAR</button>
+              <button type="submit" className="w-full bg-emerald-800 text-white font-black py-6 rounded-[2.5rem] shadow-2xl uppercase tracking-widest text-sm active:scale-95 transition-all flex items-center justify-center gap-3"><Save size={20} /> GUARDAR</button>
             </form>
           </div>
         </div>
@@ -580,10 +536,10 @@ const App = () => {
       {quickStatusLoad && (
         <div className="fixed inset-0 bg-slate-900/60 z-[150] flex items-center justify-center p-12 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-xs rounded-[3rem] shadow-2xl p-8 animate-in zoom-in-95">
-            <h3 className="text-center font-black text-slate-400 text-[10px] uppercase mb-8 tracking-widest italic">Actualizar Estado</h3>
+            <h3 className="text-center font-black text-slate-400 text-[10px] uppercase mb-8 tracking-widest italic">Actualizar Proceso</h3>
             <div className="space-y-4">
               {['Pendiente', 'En Proceso', 'Entregado'].map(s => (
-                <button key={`quick-opt-${s}`} onClick={() => updateQuickStatus(quickStatusLoad.id, s)}
+                <button key={`quick-status-${s}`} onClick={() => updateQuickStatus(quickStatusLoad.id, s)}
                   className={`w-full py-5 rounded-[1.5rem] font-black uppercase text-xs transition-all border-4 
                     ${quickStatusLoad.status === s ? 'bg-emerald-800 border-emerald-800 text-white shadow-xl' : 'bg-slate-50 border-slate-50 text-slate-400 active:scale-95'}`}>
                   {s}
@@ -591,6 +547,91 @@ const App = () => {
               ))}
               <button onClick={() => setQuickStatusLoad(null)} className="w-full py-4 text-[10px] font-black text-rose-400 uppercase mt-4 active:bg-rose-50 rounded-2xl transition-all">Cancelar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DETALLE (VISTA COMPLETA) */}
+      {viewLoad && (
+        <div className="fixed inset-0 bg-slate-900/95 z-[140] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in transition-all">
+          <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+            <div className="p-8 bg-emerald-800 text-white flex justify-between items-start">
+              <div>
+                <h2 className="text-2xl font-black uppercase italic leading-tight tracking-tighter">{viewLoad.customer}</h2>
+                <p className="text-emerald-200 text-[10px] font-bold mt-2 uppercase tracking-widest">{viewLoad.date} • {viewLoad.time} HS</p>
+              </div>
+              <button onClick={() => setViewLoad(null)} className="p-3 bg-white/10 rounded-2xl active:scale-90 transition-all"><X size={20}/></button>
+            </div>
+            
+            <div className="p-8 space-y-6 overflow-y-auto max-h-[60vh] hide-scrollbar bg-white">
+              {(!viewLoad.transport || viewLoad.transport.trim() === "") && (
+                <div className="bg-rose-50 border-2 border-rose-100 p-5 rounded-[2rem] flex items-center gap-4 animate-pulse shadow-sm">
+                   <div className="bg-white p-2 rounded-xl text-rose-600 shadow-sm"><AlertTriangle size={24} /></div>
+                   <div>
+                     <p className="text-[11px] font-black text-rose-900 uppercase">Dato Faltante</p>
+                     <p className="text-[10px] font-bold text-rose-500 uppercase leading-none mt-1 italic">Falta asignar flete</p>
+                   </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
+                   <p className="text-[9px] font-black text-slate-300 uppercase italic">Referencia OC</p>
+                   <p className="text-sm font-black">{viewLoad.poNumber || 'S/N'}</p>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
+                   <p className="text-[9px] font-black text-slate-300 uppercase italic">Turno Asignado</p>
+                   <p className="text-sm font-black text-emerald-600">#{viewLoad.turnNumber || '-'}</p>
+                </div>
+              </div>
+
+              <div className={`p-6 rounded-[2.5rem] border-2 transition-colors ${!viewLoad.transport ? 'bg-slate-50 border-slate-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                <p className="text-[9px] font-black text-slate-400 uppercase mb-2 flex items-center gap-2 italic"><Truck size={14}/> Logística</p>
+                <p className={`text-sm font-black ${!viewLoad.transport ? 'text-slate-300 italic' : 'text-emerald-900'}`}>
+                  {viewLoad.transport || 'Flete pendiente'}
+                </p>
+                <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100">
+                  <Package size={18} className="text-emerald-500"/>
+                  <p className="text-xl font-black text-emerald-900 tracking-tighter">{viewLoad.pallets} Pallets Totales</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest italic">Productos</p>
+                <div className="space-y-2">
+                   {viewLoad.articles?.map((art, i) => (
+                      <div key={`v-art-item-${i}`} className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm flex justify-between items-center transition-all hover:bg-slate-50">
+                         <span className="text-xs font-black uppercase text-slate-800">{art.name}</span>
+                         <span className="text-[10px] font-bold text-slate-400 italic">{art.feature}</span>
+                      </div>
+                   ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t flex gap-3">
+               <button onClick={() => {setEditingId(viewLoad.id); setNewLoad(viewLoad); setShowForm(true); setViewLoad(null);}} className="flex-1 py-5 bg-white border-2 border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-400 active:scale-95 transition-all">Editar</button>
+               <button onClick={() => {setShareLoad(viewLoad); setViewLoad(null);}} className="flex-1 py-5 bg-emerald-700 text-white rounded-2xl text-[10px] font-black uppercase shadow-lg active:scale-95 transition-all">Reporte</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL WHATSAPP CARGA */}
+      {shareLoad && (
+        <div className="fixed inset-0 bg-slate-900/90 z-[160] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in transition-all">
+          <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl p-10 flex flex-col overflow-hidden animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-2xl font-black text-slate-800 uppercase italic flex items-center gap-4 tracking-tighter"><Share2 size={24} className="text-emerald-700" /> Reporte SII</h2>
+              <button onClick={() => setShareLoad(null)} className="p-3 bg-slate-100 rounded-full text-slate-300 active:scale-90 transition-all"><X size={20} /></button>
+            </div>
+            <div className="flex-1 bg-slate-50 rounded-[2.5rem] p-8 overflow-y-auto mb-10 border-2 border-slate-100 shadow-inner">
+              <pre className="text-sm font-medium text-slate-700 whitespace-pre-wrap leading-relaxed font-sans">{formatWhatsAppMessage(shareLoad)}</pre>
+            </div>
+            <button onClick={() => copyToClipboard(formatWhatsAppMessage(shareLoad))}
+              className={`w-full py-7 rounded-[2.5rem] font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-4 transition-all shadow-xl ${copyFeedback ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-200' : 'bg-emerald-800 text-white active:scale-95'}`}>
+              {copyFeedback ? '¡COPIADO!' : 'COPIAR PARA WHATSAPP'}
+            </button>
           </div>
         </div>
       )}
