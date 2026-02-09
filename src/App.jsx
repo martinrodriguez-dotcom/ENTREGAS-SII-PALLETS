@@ -83,9 +83,9 @@ const App = () => {
     customer: "",
     poNumber: "",
     pallets: "",
-    transportName: "",    // Subcampo: Empresa
-    transportDriver: "",  // Subcampo: Chofer
-    transportVehicle: "", // Subcampo: Vehiculo
+    transportName: "",    
+    transportDriver: "",  
+    transportVehicle: "", 
     condition: "",
     paymentCondition: "",
     price: "",
@@ -171,7 +171,7 @@ const App = () => {
     return () => { unsubLoads(); unsubOCs(); };
   }, [user]);
 
-  // --- MEMOS DE NEGOCIO ---
+  // --- MEMOS ---
   const isAdmin = useMemo(() => userRole === 'admin', [userRole]);
 
   const calendarDays = useMemo(() => {
@@ -194,11 +194,9 @@ const App = () => {
 
     loads.forEach(load => {
       const loadDate = new Date(load.date);
-      // Alerta Flete
       if (!load.transportName || load.transportName.trim() === "") {
         alerts.push({ id: `flete-${load.id}`, type: 'missing_data', title: 'Falta Flete', message: load.customer, loadId: load.id });
       }
-      // Alerta Próxima Entrega
       if (loadDate >= today && loadDate <= limitDate && load.status !== 'Entregado') {
         alerts.push({ id: `prox-${load.id}`, type: 'proximity', title: 'Entrega Próxima', message: `${load.customer} (${load.date})`, loadId: load.id });
       }
@@ -229,7 +227,7 @@ const App = () => {
     return (max + 1).toString().padStart(4, '0');
   }, [internalOCs]);
 
-  // --- MANEJADORES DE ACCIÓN ---
+  // --- ACCIONES ---
   const selectOC = (oc) => {
     const totalQty = oc.articles.reduce((sum, art) => sum + (Number(art.qty) || 0), 0);
     setNewLoad({
@@ -305,10 +303,16 @@ const App = () => {
 
   const formatWhatsAppMessage = (load) => {
     if (!load) return "";
-    let msg = `*📦 REPORTE DE ENTREGA - SII PALLETS*\n👤 *Cliente:* ${load.customer.toUpperCase()}\n📅 *Fecha:* ${load.date}\n⏰ *Hora:* ${load.time}hs\n📄 *OC:* ${load.poNumber || 'N/A'}\n\n*LOGÍSTICA:* \n🚚 *Transporte:* ${load.transportName || 'S/D'}\n👤 *Chofer:* ${load.transportDriver || 'S/D'}\n🚛 *Vehículo:* ${load.transportVehicle || 'S/D'}\n📦 *Pallets:* ${load.pallets}\n✅ *Estado:* ${load.status.toUpperCase()}`;
-    if (isAdmin) {
-      msg += `\n\n*ADMIN:* \n💰 *Precio:* $${load.price || '0'}\n💳 *Pago:* ${load.paymentCondition || 'S/D'}\n🏢 *Cuenta:* ${load.accountType}`;
-    }
+    
+    // Generamos el detalle de productos con nombre y cantidad
+    const productDetail = load.articles
+      ?.filter(art => art.name.trim() !== "")
+      .map(art => ` • *${art.name.toUpperCase()}*: ${art.feature}`)
+      .join('\n') || "Sin detalle de artículos";
+
+    let msg = `*📦 REPORTE DE ENTREGA - SII PALLETS*\n👤 *Cliente:* ${load.customer.toUpperCase()}\n📅 *Fecha:* ${load.date}\n⏰ *Hora:* ${load.time}hs\n📄 *OC:* ${load.poNumber || 'N/A'}\n\n*LOGÍSTICA:* \n🚚 *Transporte:* ${load.transportName || 'S/D'}\n👤 *Chofer:* ${load.transportDriver || 'S/D'}\n🚛 *Vehículo:* ${load.transportVehicle || 'S/D'}\n\n*📦 PRODUCTOS:* \n${productDetail}\n\n📦 *Total Pallets:* ${load.pallets}\n✅ *Estado:* ${load.status.toUpperCase()}`;
+    
+    // OMITIMOS SECCION FINANZAS POR REQUERIMIENTO
     return msg;
   };
 
@@ -400,8 +404,8 @@ const App = () => {
 
         {isAdmin && (
           <div className="grid grid-cols-2 gap-4 mb-6">
-            <button onClick={() => { setEditingId(null); setNewLoad(initialLoadState); setShowForm(true); }} className="bg-emerald-800 text-white p-5 rounded-[2rem] shadow-lg flex flex-col items-center gap-2 active:scale-95 transition-all"><Plus size={24} /><span className="text-[10px] font-black uppercase tracking-widest leading-none">Nueva Carga</span></button>
-            <button onClick={() => setShowOCForm(true)} className="bg-indigo-700 text-white p-5 rounded-[2rem] shadow-lg flex flex-col items-center gap-2 active:scale-95 transition-all"><FilePlus size={24} /><span className="text-[10px] font-black uppercase tracking-widest leading-none">Generar OC</span></button>
+            <button onClick={() => { setEditingId(null); setNewLoad(initialLoadState); setShowForm(true); }} className="bg-emerald-800 text-white p-5 rounded-[2rem] shadow-lg flex flex-col items-center gap-2 active:scale-95 transition-all"><Plus size={24} /><span className="text-[10px] font-black uppercase tracking-widest">Nueva Carga</span></button>
+            <button onClick={() => setShowOCForm(true)} className="bg-indigo-700 text-white p-5 rounded-[2rem] shadow-lg flex flex-col items-center gap-2 active:scale-95 transition-all"><FilePlus size={24} /><span className="text-[10px] font-black uppercase tracking-widest">Generar OC</span></button>
           </div>
         )}
 
@@ -417,7 +421,6 @@ const App = () => {
           <input type="text" placeholder="Buscar Cliente..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border-2 border-slate-50 rounded-3xl py-4 pl-14 pr-6 text-sm font-bold shadow-sm outline-none focus:ring-4 focus:ring-emerald-500/5 transition-all" />
         </div>
 
-        {/* LISTADO DE HOY */}
         <div className="space-y-4 pb-10">
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-4 flex items-center gap-2 mb-2 italic"><ClipboardList size={14}/> Ruta - {selectedDate.toLocaleDateString()}</h3>
           {filteredDayLoads.length > 0 ? filteredDayLoads.map(load => (
@@ -431,7 +434,7 @@ const App = () => {
                   <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                       <button onClick={() => { 
                           setEditingId(load.id); 
-                          setNewLoad({ ...load }); // EDICIÓN TOTAL: CARGA TODOS LOS DATOS
+                          setNewLoad({ ...load }); 
                           setShowForm(true); 
                         }} className="p-2 text-slate-200 hover:text-blue-500 active:scale-110 transition-all"><Edit3 size={18} /></button>
                       <button onClick={() => deleteLoad(load.id)} className="p-2 text-slate-200 hover:text-rose-500 active:scale-110 transition-all"><Trash2 size={18} /></button>
@@ -446,13 +449,13 @@ const App = () => {
           )) : (
             <div className="text-center py-20 bg-slate-200/10 rounded-[4rem] border-2 border-dashed border-slate-200 flex flex-col items-center">
               <Package size={40} className="text-slate-200 mb-4" />
-              <p className="text-slate-300 font-black uppercase text-[10px] italic tracking-widest">Sin entregas para hoy</p>
+              <p className="text-slate-300 font-black uppercase text-[10px] italic tracking-widest">Sin entregas hoy</p>
             </div>
           )}
         </div>
       </main>
 
-      {/* MODAL: FORMULARIO ENTREGA (EDICIÓN TOTAL + FLETE DETALLADO) */}
+      {/* --- MODAL FORMULARIO ENTREGA (EDICIÓN TOTAL) --- */}
       {showForm && isAdmin && (
         <div className="fixed inset-0 bg-slate-900/90 z-[100] flex items-end justify-center backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md rounded-t-[3.5rem] shadow-2xl p-8 overflow-y-auto max-h-[92vh] animate-in slide-in-from-bottom-10 duration-500">
@@ -490,7 +493,7 @@ const App = () => {
                 </div>
               </div>
 
-              {/* SECCIÓN FLETE DETALLADO */}
+              {/* SECCIÓN LOGÍSTICA DETALLADA */}
               <div className="bg-slate-50 p-6 rounded-[2.5rem] space-y-4 border border-slate-100 shadow-inner">
                 <p className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-2 italic"><Truck size={14}/> Flete Detallado</p>
                 <input type="text" placeholder="EMPRESA DE TRANSPORTE" value={newLoad.transportName} onChange={e => setNewLoad({...newLoad, transportName: e.target.value})} className="w-full bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
@@ -519,7 +522,6 @@ const App = () => {
                    <label className="text-[9px] font-black text-slate-400 uppercase ml-2 italic">Pallets Totales</label>
                    <input type="number" placeholder="0" required value={newLoad.pallets} onChange={e => setNewLoad({...newLoad, pallets: e.target.value})} className="bg-slate-50 rounded-2xl p-5 text-sm font-black shadow-inner w-full" />
                 </div>
-                <div className="flex items-center gap-2 px-2 text-[10px] font-black text-slate-300 uppercase italic leading-tight">Total carga registrada</div>
               </div>
 
               <div className="space-y-4">
@@ -538,7 +540,7 @@ const App = () => {
         </div>
       )}
 
-      {/* MODAL: NUEVA OC (EDICIÓN TOTAL + SUB-FLETE) */}
+      {/* FORMULARIO OC (ADMIN) */}
       {showOCForm && isAdmin && (
         <div className="fixed inset-0 bg-slate-900/90 z-[100] flex items-end justify-center p-0 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md rounded-t-[3.5rem] shadow-2xl p-8 overflow-y-auto max-h-[95vh] animate-in slide-in-from-bottom-10 duration-500">
@@ -547,7 +549,7 @@ const App = () => {
               <input type="text" required placeholder="NOMBRE DEL CLIENTE" value={newOC.customer} onChange={e => setNewOC({...newOC, customer: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-5 text-sm font-black uppercase shadow-inner" />
               
               <div className="bg-emerald-50 p-6 rounded-[2.5rem] space-y-4 border border-emerald-100 shadow-inner">
-                <p className="text-[9px] font-black text-emerald-800 uppercase flex items-center gap-2 italic"><DollarSign size={14}/> Administración / Precios</p>
+                <p className="text-[9px] font-black text-emerald-800 uppercase flex items-center gap-2 italic"><DollarSign size={14}/> Finanzas</p>
                 <div className="grid grid-cols-2 gap-4">
                    <input type="text" placeholder="COND. PAGO" value={newOC.paymentCondition} onChange={e => setNewOC({...newOC, paymentCondition: e.target.value})} className="bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
                    <input type="number" placeholder="PRECIO $" value={newOC.price} onChange={e => setNewOC({...newOC, price: e.target.value})} className="bg-white rounded-xl p-4 text-xs font-black shadow-sm" />
@@ -559,7 +561,6 @@ const App = () => {
                 </div>
               </div>
 
-              {/* SUB-FLETE EN OC */}
               <div className="bg-slate-50 p-6 rounded-[2.5rem] space-y-4 border border-slate-100 shadow-inner">
                 <p className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-2 italic"><Truck size={14}/> Logística Sugerida</p>
                 <input type="text" placeholder="EMPRESA TRANSPORTE" value={newOC.transportName} onChange={e => setNewOC({...newOC, transportName: e.target.value})} className="w-full bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
@@ -575,13 +576,13 @@ const App = () => {
               </div>
               
               <div className="space-y-4">
-                 <div className="flex justify-between items-center px-2"><h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Artículos</h3><button type="button" onClick={() => setNewOC({...newOC, articles: [...newOC.articles, {name:"", qty:""}]})} className="bg-indigo-600 text-white p-2 rounded-xl active:scale-90 shadow-md transition-all"><Plus size={18} /></button></div>
                  {newOC.articles.map((art, idx) => (
-                    <div key={`row-oc-new-${idx}`} className="flex gap-2 animate-in slide-in-from-left-2">
+                    <div key={`oc-nr-${idx}`} className="flex gap-2 animate-in slide-in-from-left-2">
                        <input type="text" placeholder="Producto" required value={art.name} onChange={e => { const u = [...newOC.articles]; u[idx].name = e.target.value; setNewOC({...newOC, articles: u}); }} className="flex-1 bg-slate-50 border-none rounded-2xl p-4 text-xs font-black uppercase shadow-inner" />
                        <input type="text" placeholder="Cant." required value={art.qty} onChange={e => { const u = [...newOC.articles]; u[idx].qty = e.target.value; setNewOC({...newOC, articles: u}); }} className="w-24 bg-slate-50 border-none rounded-2xl p-4 text-xs font-black uppercase text-center shadow-inner" />
                     </div>
                  ))}
+                 <button type="button" onClick={() => setNewOC({...newOC, articles: [...newOC.articles, {name:"", qty:""}]})} className="w-full py-3 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all shadow-sm">Añadir Producto +</button>
               </div>
               <button type="submit" className="w-full bg-indigo-700 text-white font-black py-6 rounded-[2.5rem] shadow-2xl uppercase tracking-widest text-sm active:scale-95 transition-all flex items-center justify-center gap-3"><FileText size={20} /> GENERAR OC</button>
             </form>
@@ -642,16 +643,13 @@ const App = () => {
         </div>
       )}
 
-      {/* MODAL: ALERTAS SISTEMA */}
+      {/* ALERTAS SISTEMA */}
       {showAlerts && (
         <div className="fixed inset-0 bg-slate-900/90 z-[160] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in transition-all">
           <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
-            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-emerald-50">
-              <h2 className="text-xl font-black text-emerald-900 uppercase italic">Notificaciones</h2>
-              <button onClick={() => setShowAlerts(false)} className="p-3 bg-white rounded-2xl active:scale-90 transition-all shadow-sm"><X size={20} /></button>
-            </div>
+            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-emerald-50"><h2 className="text-xl font-black text-emerald-900 uppercase italic">Notificaciones</h2><button onClick={() => setShowAlerts(false)} className="p-3 bg-white rounded-2xl active:scale-90 transition-all shadow-sm"><X size={20} /></button></div>
             <div className="p-8 overflow-y-auto max-h-[60vh] hide-scrollbar text-center">
-              <button onClick={requestNotifPermission} className="w-full py-4 bg-emerald-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest mb-6 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-3">{notifPermission === 'granted' ? <><Check size={16}/> Alertas Activas</> : <><BellRing size={16}/> Activar Alertas</>}</button>
+              <button onClick={requestNotifPermission} className="w-full py-4 bg-emerald-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest mb-6 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-3">{notifPermission === 'granted' ? <><Check size={16}/> Alertas Activas</> : <><BellRing size={16}/> Activar Notificaciones</>}</button>
               {internalAlerts.length > 0 ? internalAlerts.map((a, i) => (
                 <div key={`alert-i-${i}`} onClick={() => { const target = loads.find(l => l.id === a.loadId); if(target) setViewLoad(target); setShowAlerts(false); }} className={`p-5 rounded-3xl border-2 flex items-center gap-4 mb-3 text-left shadow-sm cursor-pointer active:scale-95 transition-all ${a.type === 'proximity' ? 'bg-amber-50 border-amber-100' : 'bg-rose-50 border-rose-100'}`}>
                   {a.type === 'proximity' ? <CalendarIcon size={24} className="text-amber-600 shrink-0" /> : <AlertTriangle size={24} className="text-rose-600 shrink-0" />}
@@ -678,7 +676,7 @@ const App = () => {
         </div>
       )}
 
-      {/* SELECTOR OC PARA CARGA */}
+      {/* SELECTOR OC */}
       {showOCPicker && isAdmin && (
         <div className="fixed inset-0 bg-slate-900/80 z-[250] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in transition-all">
           <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
@@ -688,22 +686,6 @@ const App = () => {
                 <div key={`p-oc-${oc.id}`} onClick={() => selectOC(oc)} className="bg-white border-2 border-slate-50 p-5 rounded-[2rem] flex items-center justify-between cursor-pointer hover:border-indigo-500 active:scale-[0.98] transition-all shadow-sm"><div className="flex items-center gap-5"><FileText size={24} className="text-indigo-600" /><div><p className="text-xs font-black uppercase text-slate-900 leading-tight">{oc.customer}</p><p className="text-[10px] font-bold text-indigo-500 uppercase">OC #{oc.ocNumber}</p></div></div><ArrowRight size={20} className="text-slate-200" /></div>
               )) : <div className="text-center py-10 text-slate-300 font-black uppercase text-[10px] italic">Sin OCs pendientes</div>}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* OC SUCCESS */}
-      {ocSuccess && (
-        <div className="fixed inset-0 bg-slate-900/95 z-[300] flex items-center justify-center p-6 backdrop-blur-md animate-in zoom-in-95">
-          <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl p-10 flex flex-col items-center text-center">
-            <Check size={48} className="text-emerald-600 mb-6 bg-emerald-50 p-2 rounded-full shadow-inner" />
-            <h2 className="text-2xl font-black text-slate-800 uppercase italic mb-2 leading-tight tracking-tighter">OC GENERADA</h2>
-            <p className="text-4xl font-black text-emerald-700 mb-8 tracking-tighter italic">N° {ocSuccess.ocNumber}</p>
-            <div className="grid grid-cols-1 w-full gap-4">
-               <button onClick={() => copyToClipboard(formatOCWhatsApp(ocSuccess))} className={`w-full py-5 rounded-[2rem] font-black uppercase text-xs flex items-center justify-center gap-3 transition-all ${copyFeedback ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-200' : 'bg-emerald-800 text-white shadow-xl active:scale-95'}`}>{copyFeedback ? '¡COPIADO!' : 'COPIAR WHATSAPP'}</button>
-               <button onClick={() => printOC(ocSuccess)} className="w-full py-5 bg-slate-50 text-slate-500 rounded-[2rem] font-black uppercase text-xs flex items-center justify-center gap-3 active:bg-slate-100 border-2 border-slate-100 shadow-sm transition-all">IMPRIMIR / PDF</button>
-            </div>
-            <button onClick={() => setOcSuccess(null)} className="mt-8 text-[10px] font-black text-slate-300 uppercase underline tracking-[0.2em]">Cerrar</button>
           </div>
         </div>
       )}
