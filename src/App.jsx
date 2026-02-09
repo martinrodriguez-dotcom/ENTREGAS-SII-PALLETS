@@ -323,12 +323,12 @@ const App = () => {
     setTimeout(() => setCopyFeedback(false), 2000);
   };
 
-  // --- VISTAS ---
-  if (authLoading) return <div className="h-screen flex items-center justify-center bg-emerald-900 text-white font-black italic animate-pulse">SII PALLETS v4.3...</div>;
+  // --- RENDERIZADO ---
+  if (authLoading) return <div className="h-screen flex items-center justify-center bg-emerald-900 text-white font-black italic animate-pulse">CARGANDO SII PALLETS...</div>;
 
   if (!user) {
     return (
-      <div className="h-screen bg-slate-100 flex items-center justify-center p-6 font-sans">
+      <div className="h-screen bg-slate-100 flex items-center justify-center p-6 font-sans text-slate-900">
         <div className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl p-10 flex flex-col items-center">
           <div className="bg-emerald-800 p-6 rounded-full text-white mb-8 shadow-xl"><Lock size={40} /></div>
           <h1 className="text-2xl font-black text-slate-800 uppercase italic">SII PALLETS</h1>
@@ -378,7 +378,7 @@ const App = () => {
         {/* CALENDARIO */}
         <div className="bg-white rounded-[2.5rem] shadow-xl p-6 border border-slate-100 mb-8 animate-in slide-in-from-bottom-4">
           <div className="grid grid-cols-7 gap-1 text-center mb-4 text-[9px] font-black text-slate-300 uppercase">
-            {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, i) => <div key={`cal-h-${i}`}>{d}</div>)}
+            {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, i) => <div key={`cal-hdr-${i}`}>{d}</div>)}
           </div>
           <div className="grid grid-cols-7 gap-2">
             {calendarDays.map((date, idx) => {
@@ -386,7 +386,7 @@ const App = () => {
               const isSelected = date && dStr === selectedDate.toISOString().split('T')[0];
               const hasEvents = date && loads.some(l => l.date === dStr);
               return (
-                <button key={`cb-${idx}-${dStr}`} disabled={!date} onClick={() => setSelectedDate(date)}
+                <button key={`cb-day-${idx}-${dStr}`} disabled={!date} onClick={() => setSelectedDate(date)}
                   className={`h-10 rounded-2xl flex flex-col items-center justify-center relative transition-all 
                   ${!date ? 'opacity-0' : 'opacity-100'} 
                   ${isSelected ? 'bg-emerald-600 text-white shadow-lg scale-105 z-10 font-black' : 'bg-slate-50 text-slate-400 active:scale-95'}`}>
@@ -400,8 +400,8 @@ const App = () => {
 
         {isAdmin && (
           <div className="grid grid-cols-2 gap-4 mb-6">
-            <button onClick={() => { setEditingId(null); setNewLoad(initialLoadState); setShowForm(true); }} className="bg-emerald-800 text-white p-5 rounded-[2rem] shadow-lg flex flex-col items-center gap-2 active:scale-95 transition-all"><Plus size={24} /><span className="text-[10px] font-black uppercase tracking-widest">Nueva Carga</span></button>
-            <button onClick={() => setShowOCForm(true)} className="bg-indigo-700 text-white p-5 rounded-[2rem] shadow-lg flex flex-col items-center gap-2 active:scale-95 transition-all"><FilePlus size={24} /><span className="text-[10px] font-black uppercase tracking-widest">Generar OC</span></button>
+            <button onClick={() => { setEditingId(null); setNewLoad(initialLoadState); setShowForm(true); }} className="bg-emerald-800 text-white p-5 rounded-[2rem] shadow-lg flex flex-col items-center gap-2 active:scale-95 transition-all"><Plus size={24} /><span className="text-[10px] font-black uppercase tracking-widest leading-none">Nueva Carga</span></button>
+            <button onClick={() => setShowOCForm(true)} className="bg-indigo-700 text-white p-5 rounded-[2rem] shadow-lg flex flex-col items-center gap-2 active:scale-95 transition-all"><FilePlus size={24} /><span className="text-[10px] font-black uppercase tracking-widest leading-none">Generar OC</span></button>
           </div>
         )}
 
@@ -419,7 +419,7 @@ const App = () => {
 
         {/* LISTADO DE HOY */}
         <div className="space-y-4 pb-10">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-4 flex items-center gap-2 mb-2 italic"><ClipboardList size={14}/> Hoja de Ruta - {selectedDate.toLocaleDateString()}</h3>
+          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-4 flex items-center gap-2 mb-2 italic"><ClipboardList size={14}/> Ruta - {selectedDate.toLocaleDateString()}</h3>
           {filteredDayLoads.length > 0 ? filteredDayLoads.map(load => (
             <div key={load.id} onClick={() => setViewLoad(load)} className={`bg-white p-6 rounded-[2.5rem] shadow-sm border relative transition-all duration-300 active:scale-[0.98] ${(!load.transportName || load.transportName.trim() === "") ? 'border-rose-200 ring-4 ring-rose-50 animate-pulse' : 'border-slate-100 hover:border-emerald-100'}`}>
               <div className="flex justify-between items-start mb-4">
@@ -479,7 +479,7 @@ const App = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                    <label className="text-[9px] font-black text-slate-400 uppercase ml-2 italic">Turno</label>
-                   <input type="text" placeholder="TURNO N°" value={newLoad.turnNumber} onChange={e => setNewLoad({...newLoad, turnNumber: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 text-sm font-black text-emerald-600 shadow-inner" />
+                   <input type="text" placeholder="TURNO N°" value={newLoad.turnNumber} onChange={e => setNewLoad({...newLoad, turnNumber: e.target.value})} className="bg-slate-50 rounded-2xl p-5 text-sm font-black text-emerald-600 shadow-inner" />
                 </div>
                 <div className="space-y-1">
                    <label className="text-[9px] font-black text-slate-400 uppercase ml-2 italic">Orden Compra</label>
@@ -589,7 +589,60 @@ const App = () => {
         </div>
       )}
 
-      {/* --- MODAL ALERTAS --- */}
+      {/* MODAL DETALLE (VISTA COMPLETA) */}
+      {viewLoad && (
+        <div className="fixed inset-0 bg-slate-900/95 z-[140] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in transition-all">
+          <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+            <div className="p-8 bg-emerald-800 text-white flex justify-between items-start">
+              <div><h2 className="text-2xl font-black uppercase italic leading-tight tracking-tighter text-white">{viewLoad.customer}</h2><p className="text-emerald-200 text-[10px] font-bold mt-2 uppercase tracking-widest">{viewLoad.date} • {viewLoad.time} HS</p></div>
+              <button onClick={() => setViewLoad(null)} className="p-3 bg-white/10 rounded-2xl active:scale-90 transition-all text-white"><X size={20}/></button>
+            </div>
+            <div className="p-8 space-y-6 overflow-y-auto max-h-[60vh] hide-scrollbar bg-white">
+              {isAdmin && (
+                <div className="bg-emerald-50 p-6 rounded-[2.5rem] border-2 border-emerald-100 space-y-3 animate-in fade-in zoom-in-95 shadow-sm">
+                  <p className="text-[10px] font-black text-emerald-800 uppercase flex items-center gap-2 italic"><DollarSign size={12}/> Administración</p>
+                  <div className="flex justify-between items-center text-sm font-black">
+                     <span className="text-emerald-900 text-xl font-black italic">$ {viewLoad.price || '0'}</span>
+                     <span className="bg-emerald-800 text-white px-4 py-1.5 rounded-xl text-[10px] shadow-sm">{viewLoad.accountType}</span>
+                  </div>
+                  <p className="text-xs font-bold text-emerald-600 uppercase border-t border-emerald-100 pt-3 flex items-center gap-2"><CreditCard size={14}/> {viewLoad.paymentCondition || 'S/D'}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4"><div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 text-center shadow-inner"><p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">Referencia OC</p><p className="text-sm font-black">{viewLoad.poNumber || 'S/N'}</p></div><div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 text-center shadow-inner"><p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">Turno</p><p className="text-sm font-black text-emerald-600">#{viewLoad.turnNumber || '-'}</p></div></div>
+              
+              <div className={`p-6 rounded-[2.5rem] border-2 transition-colors shadow-inner ${(!viewLoad.transportName || viewLoad.transportName.trim() === "") ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+                <p className="text-[9px] font-black text-slate-400 uppercase mb-3 italic tracking-widest flex items-center gap-2"><Truck size={14}/> Logística de Entrega</p>
+                <div className="space-y-2">
+                   <p className="text-sm font-black text-slate-900 uppercase">{viewLoad.transportName || '⚠️ FLETE PENDIENTE'}</p>
+                   <div className="flex flex-wrap gap-x-4 gap-y-2 text-[10px] font-bold text-slate-500 uppercase">
+                      <span className="flex items-center gap-1"><User size={12} className="text-emerald-500"/> {viewLoad.transportDriver || 'S/D'}</span>
+                      <span className="flex items-center gap-1"><Car size={12} className="text-emerald-500"/> {viewLoad.transportVehicle || 'S/D'}</span>
+                   </div>
+                </div>
+                <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-200/50"><Package size={18} className="text-emerald-500"/><p className="text-xl font-black text-emerald-900 tracking-tighter">{viewLoad.pallets} Pallets Totales</p></div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest italic flex items-center gap-2"><ListFilter size={12}/> Productos Cargados</p>
+                <div className="space-y-2">
+                   {viewLoad.articles?.map((art, i) => (
+                      <div key={`view-art-line-${i}`} className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm flex justify-between items-center hover:bg-slate-50 transition-all">
+                         <span className="text-xs font-black uppercase text-slate-800">{art.name}</span>
+                         <span className="text-[10px] font-bold text-slate-400 italic bg-slate-50 px-3 py-1 rounded-lg">Cant: {art.feature}</span>
+                      </div>
+                   ))}
+                </div>
+              </div>
+            </div>
+            <div className="p-6 bg-slate-50 border-t flex gap-3 shadow-inner">
+               {isAdmin && <button onClick={() => {setEditingId(viewLoad.id); setNewLoad({ ...viewLoad }); setShowForm(true); setViewLoad(null);}} className="flex-1 py-5 bg-white border-2 border-slate-200 rounded-2xl text-[10px] font-black uppercase text-slate-400 active:scale-95 transition-all">Editar</button>}
+               <button onClick={() => {setShareLoad(viewLoad); setViewLoad(null);}} className="flex-1 py-5 bg-emerald-700 text-white rounded-2xl text-[10px] font-black uppercase shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 text-white"><Share2 size={16}/> Reporte</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ALERTAS SISTEMA */}
       {showAlerts && (
         <div className="fixed inset-0 bg-slate-900/90 z-[160] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in transition-all">
           <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
@@ -614,7 +667,7 @@ const App = () => {
       {showOCHistory && isAdmin && (
         <div className="fixed inset-0 bg-slate-900/90 z-[200] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in">
           <div className="bg-white w-full max-w-lg rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
-            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-indigo-50"><div><h2 className="text-xl font-black text-indigo-900 uppercase italic">Historial OCs</h2><p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1 italic">Gestión de documentos</p></div><button onClick={() => setShowOCHistory(false)} className="p-3 bg-white rounded-2xl active:scale-90 transition-all shadow-sm"><X size={20} /></button></div>
+            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-indigo-50"><div><h2 className="text-xl font-black text-indigo-900 uppercase italic">Historial OCs</h2><p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1 italic">Visualizar y re-imprimir</p></div><button onClick={() => setShowOCHistory(false)} className="p-3 bg-white rounded-2xl active:scale-90 transition-all shadow-sm"><X size={20} /></button></div>
             <div className="p-4 bg-slate-50 border-b relative"><Search className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-300" size={14} /><input type="text" placeholder="BUSCAR POR CLIENTE O N°..." value={ocSearchQuery} onChange={e => setOcSearchQuery(e.target.value)} className="w-full bg-white rounded-xl py-3 pl-12 pr-6 text-[10px] font-black uppercase shadow-inner" /></div>
             <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto hide-scrollbar bg-white">
               {filteredOCHistory.map((oc) => (
@@ -643,7 +696,7 @@ const App = () => {
       {ocSuccess && (
         <div className="fixed inset-0 bg-slate-900/95 z-[300] flex items-center justify-center p-6 backdrop-blur-md animate-in zoom-in-95">
           <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl p-10 flex flex-col items-center text-center">
-            <Check size={48} className="text-emerald-600 mb-6 bg-emerald-50 p-2 rounded-full" />
+            <Check size={48} className="text-emerald-600 mb-6 bg-emerald-50 p-2 rounded-full shadow-inner" />
             <h2 className="text-2xl font-black text-slate-800 uppercase italic mb-2 leading-tight tracking-tighter">OC GENERADA</h2>
             <p className="text-4xl font-black text-emerald-700 mb-8 tracking-tighter italic">N° {ocSuccess.ocNumber}</p>
             <div className="grid grid-cols-1 w-full gap-4">
@@ -670,7 +723,7 @@ const App = () => {
       {quickStatusLoad && isAdmin && (
         <div className="fixed inset-0 bg-slate-900/60 z-[150] flex items-center justify-center p-12 backdrop-blur-sm animate-in fade-in transition-all">
           <div className="bg-white w-full max-w-xs rounded-[3rem] shadow-2xl p-8 animate-in zoom-in-95">
-            <h3 className="text-center font-black text-slate-400 text-[10px] uppercase mb-8 tracking-widest italic">Actualizar Estado</h3>
+            <h3 className="text-center font-black text-slate-400 text-[10px] uppercase mb-8 tracking-widest italic leading-relaxed">Actualizar Estado</h3>
             <div className="space-y-4">
               {['Pendiente', 'En Proceso', 'Entregado'].map(s => (
                 <button key={`quick-st-${s}`} onClick={() => updateQuickStatus(quickStatusLoad.id, s)}
