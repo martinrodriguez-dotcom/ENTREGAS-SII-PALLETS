@@ -77,6 +77,13 @@ const App = () => {
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [notifPermission, setNotifPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'default');
 
+  // --- FUNCIONES AUXILIARES ---
+  const formatDateForDisplay = (dateStr) => {
+    if (!dateStr) return "S/D";
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
   const initialLoadState = {
     date: new Date().toISOString().split('T')[0],
     time: "08:00",
@@ -140,7 +147,7 @@ const App = () => {
         await createUserWithEmailAndPassword(auth, email, password);
       }
     } catch (err) {
-      setAuthError(isLoginView ? "Credenciales incorrectas." : "Error: clave de 6 caracteres mínimo.");
+      setAuthError(isLoginView ? "Credenciales incorrectas." : "Error: mínimo 6 caracteres.");
     }
   };
 
@@ -198,7 +205,7 @@ const App = () => {
         alerts.push({ id: `flete-${load.id}`, type: 'missing_data', title: 'Falta Flete', message: load.customer, loadId: load.id });
       }
       if (loadDate >= today && loadDate <= limitDate && load.status !== 'Entregado') {
-        alerts.push({ id: `prox-${load.id}`, type: 'proximity', title: 'Entrega Próxima', message: `${load.customer} (${load.date})`, loadId: load.id });
+        alerts.push({ id: `prox-${load.id}`, type: 'proximity', title: 'Entrega Próxima', message: `${load.customer} (${formatDateForDisplay(load.date)})`, loadId: load.id });
       }
     });
     return alerts;
@@ -309,7 +316,7 @@ const App = () => {
 
   const printOC = (oc) => {
     const printWindow = window.open('', '_blank');
-    const content = `<html><head><title>OC ${oc.ocNumber}</title><style>body{font-family:sans-serif;padding:40px;color:#333;}.header{text-align:center;border-bottom:2px solid #065f46;padding-bottom:20px;}.details{margin-top:30px;display:grid;grid-template-cols:1fr 1fr;gap:20px;}.table{width:100%;border-collapse:collapse;margin-top:20px;}.table th,.table td{border:1px solid #ddd;padding:12px;text-align:left;}.table th{background:#f4f4f4;}.footer{margin-top:50px;font-size:11px;text-align:center;color:#94a3b8;}.f-box{background:#f1f5f9;padding:15px;border-radius:10px;margin-bottom:20px; border: 1px solid #e2e8f0;}</style></head><body><div class="header"><h1>ORDEN DE COMPRA INTERNA</h1><p>SII PALLETS LOGÍSTICA</p></div><div class="details"><div><p><strong>N° OC:</strong> #${oc.ocNumber}</p><p><strong>Cliente:</strong> ${oc.customer.toUpperCase()}</p></div><div style="text-align:right;"><p><strong>Fecha:</strong> ${oc.date}</p><p><strong>Turno/Ref:</strong> ${oc.turn || 'N/A'}</p></div></div><div class="f-box"><p><strong>Transporte:</strong> ${oc.transportName || 'S/D'}</p><p><strong>Chofer:</strong> ${oc.transportDriver || 'S/D'}</p><p><strong>Vehículo:</strong> ${oc.transportVehicle || 'S/D'}</p></div><table class="table"><thead><tr><th>Producto</th><th>Cantidad</th></tr></thead><tbody>${oc.articles.map(a => `<tr><td>${a.name.toUpperCase()}</td><td>${a.qty}</td></tr>`).join('')}</tbody></table><div class="footer">Generado por SII Pallets - ${new Date().toLocaleString()}</div><script>window.onload=function(){window.print();window.close();}</script></body></html>`;
+    const content = `<html><head><title>OC ${oc.ocNumber}</title><style>body{font-family:sans-serif;padding:40px;color:#333;}.header{text-align:center;border-bottom:2px solid #065f46;padding-bottom:20px;}.details{margin-top:30px;display:grid;grid-template-cols:1fr 1fr;gap:20px;}.table{width:100%;border-collapse:collapse;margin-top:20px;}.table th,.table td{border:1px solid #ddd;padding:12px;text-align:left;}.table th{background:#f4f4f4;}.footer{margin-top:50px;font-size:11px;text-align:center;color:#94a3b8;}.f-box{background:#f1f5f9;padding:15px;border-radius:10px;margin-bottom:20px; border: 1px solid #e2e8f0;}</style></head><body><div class="header"><h1>ORDEN DE COMPRA INTERNA</h1><p>SII PALLETS LOGÍSTICA</p></div><div class="details"><div><p><strong>N° OC:</strong> #${oc.ocNumber}</p><p><strong>Cliente:</strong> ${oc.customer.toUpperCase()}</p></div><div style="text-align:right;"><p><strong>Fecha:</strong> ${formatDateForDisplay(oc.date)}</p><p><strong>Turno/Ref:</strong> ${oc.turn || 'N/A'}</p></div></div><div class="f-box"><p><strong>Transporte:</strong> ${oc.transportName || 'S/D'}</p><p><strong>Chofer:</strong> ${oc.transportDriver || 'S/D'}</p><p><strong>Vehículo:</strong> ${oc.transportVehicle || 'S/D'}</p></div><table class="table"><thead><tr><th>Producto</th><th>Cantidad</th></tr></thead><tbody>${oc.articles.map(a => `<tr><td>${a.name.toUpperCase()}</td><td>${a.qty}</td></tr>`).join('')}</tbody></table><div class="footer">Generado por SII Pallets - ${new Date().toLocaleString()}</div><script>window.onload=function(){window.print();window.close();}</script></body></html>`;
     printWindow.document.write(content);
     printWindow.document.close();
   };
@@ -321,7 +328,7 @@ const App = () => {
       .map(art => ` • *${art.name.toUpperCase()}*: ${art.feature}`)
       .join('\n') || "Sin detalle de productos";
 
-    let msg = `*📦 REPORTE DE ENTREGA - SII PALLETS*\n👤 *Cliente:* ${load.customer.toUpperCase()}\n📅 *Fecha:* ${load.date}\n⏰ *Hora:* ${load.time}hs\n📄 *OC:* ${load.poNumber || 'N/A'}\n\n*LOGÍSTICA:* \n🚚 *Transporte:* ${load.transportName || 'S/D'}\n👤 *Chofer:* ${load.transportDriver || 'S/D'}\n🚛 *Vehículo:* ${load.transportVehicle || 'S/D'}\n\n*📦 PRODUCTOS:* \n${productDetail}\n\n📦 *Total Pallets:* ${load.pallets}\n✅ *Estado:* ${load.status.toUpperCase()}`;
+    let msg = `*📦 REPORTE DE ENTREGA - SII PALLETS*\n👤 *Cliente:* ${load.customer.toUpperCase()}\n📅 *Fecha:* ${formatDateForDisplay(load.date)}\n⏰ *Hora:* ${load.time}hs\n📄 *OC:* ${load.poNumber || 'N/A'}\n\n*LOGÍSTICA:* \n🚚 *Transporte:* ${load.transportName || 'S/D'}\n👤 *Chofer:* ${load.transportDriver || 'S/D'}\n🚛 *Vehículo:* ${load.transportVehicle || 'S/D'}\n\n*📦 PRODUCTOS:* \n${productDetail}\n\n📦 *Total Pallets:* ${load.pallets}\n✅ *Estado:* ${load.status.toUpperCase()}`;
     return msg;
   };
 
@@ -394,10 +401,7 @@ const App = () => {
         </div>
       </header>
 
-      {/* DASHBOARD PRINCIPAL */}
       <main className="px-5 -mt-6 relative z-20">
-        
-        {/* CALENDARIO */}
         <div className="bg-white rounded-[2.5rem] shadow-xl p-6 border border-slate-100 mb-8 animate-in slide-in-from-bottom-4">
           <div className="grid grid-cols-7 gap-1 text-center mb-4 text-[9px] font-black text-slate-300 uppercase">
             {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, i) => <div key={`cal-h-${i}`}>{d}</div>)}
@@ -438,7 +442,7 @@ const App = () => {
         </div>
 
         <div className="space-y-4 pb-10">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-4 flex items-center gap-2 mb-2 italic"><ClipboardList size={14}/> Hoja de Ruta - {selectedDate.toLocaleDateString()}</h3>
+          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-4 flex items-center gap-2 mb-2 italic"><ClipboardList size={14}/> Hoja de Ruta - {formatDateForDisplay(selectedDate.toISOString().split('T')[0])}</h3>
           {filteredDayLoads.length > 0 ? filteredDayLoads.map(load => (
             <div key={load.id} onClick={() => setViewLoad(load)} className={`bg-white p-6 rounded-[2.5rem] shadow-sm border relative transition-all duration-300 active:scale-[0.98] ${(!load.transportName || load.transportName.trim() === "") ? 'border-rose-200 ring-4 ring-rose-50 animate-pulse' : 'border-slate-100 hover:border-emerald-100'}`}>
               <div className="flex justify-between items-start mb-4">
@@ -461,7 +465,7 @@ const App = () => {
           )) : (
             <div className="text-center py-20 bg-slate-200/10 rounded-[4rem] border-2 border-dashed border-slate-200 flex flex-col items-center">
               <Package size={40} className="text-slate-200 mb-4" />
-              <p className="text-slate-300 font-black uppercase text-[10px] italic tracking-widest">Sin registros programados</p>
+              <p className="text-slate-300 font-black uppercase text-[10px] italic tracking-widest">Sin registros hoy</p>
             </div>
           )}
         </div>
@@ -472,18 +476,14 @@ const App = () => {
         <div className="fixed inset-0 bg-slate-900/90 z-[160] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in transition-all">
           <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
             <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-indigo-50">
-              <div>
-                <h2 className="text-xl font-black text-indigo-900 uppercase italic leading-none">Pendientes</h2>
-                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1 italic">Próximos 15 días</p>
-              </div>
+              <div><h2 className="text-xl font-black text-indigo-900 uppercase italic">Pendientes</h2><p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1 italic">Próximos 15 días</p></div>
               <button onClick={() => setShowPendingPanel(false)} className="p-4 bg-white rounded-2xl active:scale-90 transition-all shadow-sm"><X size={20} /></button>
             </div>
             <div className="p-6 overflow-y-auto max-h-[70vh] hide-scrollbar space-y-4">
               {pendingNext15Days.length > 0 ? pendingNext15Days.map((p) => (
-                <div key={`pnd-${p.id}`} onClick={() => { setViewLoad(p); setShowPendingPanel(false); }}
-                  className="bg-slate-50 border-2 border-slate-100 p-5 rounded-[2.5rem] relative hover:border-indigo-200 cursor-pointer active:scale-95 transition-all">
+                <div key={`pnd-${p.id}`} onClick={() => { setViewLoad(p); setShowPendingPanel(false); }} className="bg-slate-50 border-2 border-slate-100 p-5 rounded-[2.5rem] relative hover:border-indigo-200 cursor-pointer active:scale-95 transition-all">
                    <div className="flex justify-between items-start mb-3">
-                      <p className="text-[10px] font-black text-indigo-600 bg-white px-3 py-1 rounded-full border border-indigo-100 uppercase">{p.date}</p>
+                      <p className="text-[10px] font-black text-indigo-600 bg-white px-3 py-1 rounded-full border border-indigo-100 uppercase">{formatDateForDisplay(p.date)}</p>
                       <span className="text-[8px] font-black text-slate-400 uppercase bg-slate-100 px-2 py-0.5 rounded-md">{p.status}</span>
                    </div>
                    <h4 className="text-sm font-black text-slate-900 uppercase mb-3 truncate pr-4">{p.customer}</h4>
@@ -494,9 +494,7 @@ const App = () => {
                    </div>
                    <div className="absolute right-4 bottom-5 text-indigo-600 bg-white p-2 rounded-xl shadow-sm border border-indigo-50"><ArrowRight size={14}/></div>
                 </div>
-              )) : (
-                <div className="text-center py-20 text-slate-300 font-black uppercase text-[10px] italic">Nada pendiente</div>
-              )}
+              )) : <div className="text-center py-20 text-slate-300 font-black uppercase text-[10px] italic">Sin pendientes</div>}
             </div>
           </div>
         </div>
@@ -506,10 +504,7 @@ const App = () => {
       {showAlerts && (
         <div className="fixed inset-0 bg-slate-900/90 z-[160] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in transition-all">
           <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
-            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-emerald-50">
-              <h2 className="text-xl font-black text-emerald-900 uppercase italic leading-none">Notificaciones</h2>
-              <button onClick={() => setShowAlerts(false)} className="p-3 bg-white rounded-2xl active:scale-90 transition-all shadow-sm"><X size={20} /></button>
-            </div>
+            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-emerald-50"><h2 className="text-xl font-black text-emerald-900 uppercase italic">Notificaciones</h2><button onClick={() => setShowAlerts(false)} className="p-3 bg-white rounded-2xl active:scale-90 transition-all shadow-sm"><X size={20} /></button></div>
             <div className="p-8 overflow-y-auto max-h-[60vh] hide-scrollbar text-center">
               <button onClick={requestNotifPermission} className="w-full py-4 bg-emerald-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest mb-6 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-3">{notifPermission === 'granted' ? <><Check size={16}/> Alertas Activas</> : <><BellRing size={16}/> Activar Alertas</>}</button>
               {internalAlerts.length > 0 ? internalAlerts.map((a, i) => (
@@ -544,7 +539,7 @@ const App = () => {
 
               <div className="space-y-1">
                 <label className="text-[9px] font-black text-slate-400 uppercase ml-2 italic">Cliente</label>
-                <input type="text" required placeholder="CLIENTE" value={newLoad.customer} onChange={e => setNewLoad({...newLoad, customer: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 text-sm font-black uppercase shadow-inner" />
+                <input type="text" required placeholder="NOMBRE DEL CLIENTE" value={newLoad.customer} onChange={e => setNewLoad({...newLoad, customer: e.target.value})} className="w-full bg-slate-50 rounded-2xl p-5 text-sm font-black uppercase shadow-inner" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -561,17 +556,19 @@ const App = () => {
                 </div>
               </div>
 
+              {/* SECCIÓN FLETE DETALLADO */}
               <div className="bg-slate-50 p-6 rounded-[2.5rem] space-y-4 border border-slate-100 shadow-inner">
                 <p className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-2 italic"><Truck size={14}/> Flete Detallado</p>
                 <input type="text" placeholder="EMPRESA DE TRANSPORTE" value={newLoad.transportName} onChange={e => setNewLoad({...newLoad, transportName: e.target.value})} className="w-full bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
                 <div className="grid grid-cols-2 gap-4">
-                  <input type="text" placeholder="CHOFER" value={newLoad.transportDriver} onChange={e => setNewLoad({...newLoad, transportDriver: e.target.value})} className="w-full bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
-                  <input type="text" placeholder="VEHÍCULO" value={newLoad.transportVehicle} onChange={e => setNewLoad({...newLoad, transportVehicle: e.target.value})} className="w-full bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
+                  <input type="text" placeholder="NOMBRE CHOFER" value={newLoad.transportDriver} onChange={e => setNewLoad({...newLoad, transportDriver: e.target.value})} className="w-full bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
+                  <input type="text" placeholder="PATENTE / VEHÍCULO" value={newLoad.transportVehicle} onChange={e => setNewLoad({...newLoad, transportVehicle: e.target.value})} className="w-full bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
                 </div>
               </div>
 
+              {/* FINANZAS */}
               <div className="bg-emerald-50 p-6 rounded-[2.5rem] space-y-4 border border-emerald-100 shadow-inner">
-                <p className="text-[9px] font-black text-emerald-800 uppercase flex items-center gap-2 italic"><DollarSign size={14}/> Finanzas</p>
+                <p className="text-[9px] font-black text-emerald-800 uppercase flex items-center gap-2 italic"><DollarSign size={14}/> Administración / Precios</p>
                 <div className="grid grid-cols-2 gap-4">
                    <input type="text" placeholder="COND. PAGO" value={newLoad.paymentCondition} onChange={e => setNewLoad({...newLoad, paymentCondition: e.target.value})} className="bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
                    <input type="number" placeholder="PRECIO $" value={newLoad.price} onChange={e => setNewLoad({...newLoad, price: e.target.value})} className="bg-white rounded-xl p-4 text-xs font-black shadow-sm" />
@@ -588,6 +585,7 @@ const App = () => {
                    <label className="text-[9px] font-black text-slate-400 uppercase ml-2 italic">Pallets Totales</label>
                    <input type="number" placeholder="0" required value={newLoad.pallets} onChange={e => setNewLoad({...newLoad, pallets: e.target.value})} className="bg-slate-50 rounded-2xl p-5 text-sm font-black shadow-inner w-full" />
                 </div>
+                <div className="flex items-center gap-2 px-2 text-[10px] font-black text-slate-300 uppercase italic leading-tight">Total carga registrada</div>
               </div>
 
               <div className="space-y-4">
@@ -606,7 +604,7 @@ const App = () => {
         </div>
       )}
 
-      {/* MODAL: NUEVA OC (ADMIN) */}
+      {/* MODAL: NUEVA OC (EDICIÓN TOTAL + SUB-FLETE) */}
       {showOCForm && isAdmin && (
         <div className="fixed inset-0 bg-slate-900/90 z-[100] flex items-end justify-center p-0 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md rounded-t-[3.5rem] shadow-2xl p-8 overflow-y-auto max-h-[95vh] animate-in slide-in-from-bottom-10 duration-500">
@@ -627,12 +625,13 @@ const App = () => {
                 </div>
               </div>
 
+              {/* SUB-FLETE EN OC */}
               <div className="bg-slate-50 p-6 rounded-[2.5rem] space-y-4 border border-slate-100 shadow-inner">
                 <p className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-2 italic"><Truck size={14}/> Logística Sugerida</p>
                 <input type="text" placeholder="EMPRESA TRANSPORTE" value={newOC.transportName} onChange={e => setNewOC({...newOC, transportName: e.target.value})} className="w-full bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
                 <div className="grid grid-cols-2 gap-4">
                   <input type="text" placeholder="CHOFER" value={newOC.transportDriver} onChange={e => setNewOC({...newOC, transportDriver: e.target.value})} className="bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
-                  <input type="text" placeholder="VEHÍCULO" value={newOC.transportVehicle} onChange={e => setNewOC({...newOC, transportVehicle: e.target.value})} className="bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
+                  <input type="text" placeholder="PATENTE" value={newOC.transportVehicle} onChange={e => setNewOC({...newOC, transportVehicle: e.target.value})} className="bg-white rounded-xl p-4 text-xs font-black shadow-sm uppercase" />
                 </div>
               </div>
 
@@ -661,12 +660,12 @@ const App = () => {
         <div className="fixed inset-0 bg-slate-900/95 z-[140] flex items-center justify-center p-6 backdrop-blur-md animate-in fade-in transition-all">
           <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
             <div className="p-8 bg-emerald-800 text-white flex justify-between items-start">
-              <div><h2 className="text-2xl font-black uppercase italic leading-tight tracking-tighter text-white">{viewLoad.customer}</h2><p className="text-emerald-200 text-[10px] font-bold mt-2 uppercase tracking-widest">{viewLoad.date} • {viewLoad.time} HS</p></div>
+              <div><h2 className="text-2xl font-black uppercase italic leading-tight tracking-tighter text-white">{viewLoad.customer}</h2><p className="text-emerald-200 text-[10px] font-bold mt-2 uppercase tracking-widest">{formatDateForDisplay(viewLoad.date)} • {viewLoad.time} HS</p></div>
               <button onClick={() => setViewLoad(null)} className="p-3 bg-white/10 rounded-2xl active:scale-90 transition-all text-white"><X size={20}/></button>
             </div>
             <div className="p-8 space-y-6 overflow-y-auto max-h-[60vh] hide-scrollbar bg-white">
               {isAdmin && (
-                <div className="bg-emerald-50 p-6 rounded-[2.5rem] border-2 border-emerald-100 space-y-3 animate-in fade-in shadow-sm">
+                <div className="bg-emerald-50 p-6 rounded-[2.5rem] border-2 border-emerald-100 space-y-3 animate-in fade-in zoom-in-95 shadow-sm">
                   <p className="text-[10px] font-black text-emerald-800 uppercase flex items-center gap-2 italic"><DollarSign size={12}/> Administración</p>
                   <div className="flex justify-between items-center text-sm font-black">
                      <span className="text-emerald-900 text-xl font-black italic">$ {viewLoad.price || '0'}</span>
@@ -717,7 +716,7 @@ const App = () => {
             <div className="p-4 bg-slate-50 border-b relative"><Search className="absolute left-8 top-1/2 -translate-y-1/2 text-slate-300" size={14} /><input type="text" placeholder="BUSCAR POR CLIENTE O N°..." value={ocSearchQuery} onChange={e => setOcSearchQuery(e.target.value)} className="w-full bg-white rounded-xl py-3 pl-12 pr-6 text-[10px] font-black uppercase shadow-inner" /></div>
             <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto hide-scrollbar bg-white">
               {filteredOCHistory.map((oc) => (
-                <div key={`h-oc-${oc.id}`} className="bg-white border-2 border-slate-50 p-4 rounded-[2rem] flex items-center justify-between shadow-sm hover:border-indigo-200 transition-all"><div className="flex-1"><div className="flex items-center gap-2"><span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${oc.isUsed ? 'bg-slate-100 text-slate-400' : 'bg-emerald-100 text-emerald-700'}`}>{oc.isUsed ? 'USADA' : 'PENDIENTE'}</span><p className="text-[10px] font-black text-indigo-600 uppercase tracking-tighter">N° {oc.ocNumber}</p></div><p className="text-xs font-black text-slate-900 uppercase mt-1 truncate max-w-[150px]">{oc.customer}</p><p className="text-[9px] font-bold text-slate-400">{oc.date}</p></div><button onClick={() => printOC(oc)} className="p-4 bg-slate-100 rounded-2xl text-slate-500 hover:bg-indigo-600 hover:text-white transition-all active:scale-90 shadow-sm"><Printer size={20}/></button></div>
+                <div key={`h-oc-${oc.id}`} className="bg-white border-2 border-slate-50 p-4 rounded-[2rem] flex items-center justify-between shadow-sm hover:border-indigo-200 transition-all"><div className="flex-1"><div className="flex items-center gap-2"><span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${oc.isUsed ? 'bg-slate-100 text-slate-400' : 'bg-emerald-100 text-emerald-700'}`}>{oc.isUsed ? 'PROCESADA' : 'PENDIENTE'}</span><p className="text-[10px] font-black text-indigo-600 uppercase tracking-tighter">N° {oc.ocNumber}</p></div><p className="text-xs font-black text-slate-900 uppercase mt-1 truncate max-w-[150px]">{oc.customer}</p><p className="text-[9px] font-bold text-slate-400">{formatDateForDisplay(oc.date)}</p></div><button onClick={() => printOC(oc)} className="p-4 bg-slate-100 rounded-2xl text-slate-500 hover:bg-indigo-600 hover:text-white transition-all active:scale-90 shadow-sm"><Printer size={20}/></button></div>
               ))}
             </div>
           </div>
@@ -744,7 +743,7 @@ const App = () => {
             <h2 className="text-2xl font-black text-slate-800 uppercase italic mb-2 leading-tight tracking-tighter">OC GENERADA</h2>
             <p className="text-4xl font-black text-emerald-700 mb-8 tracking-tighter italic">N° {ocSuccess.ocNumber}</p>
             <div className="grid grid-cols-1 w-full gap-4">
-               <button onClick={() => copyToClipboard(formatWhatsAppMessage(ocSuccess))} className={`w-full py-5 rounded-[2rem] font-black uppercase text-xs flex items-center justify-center gap-3 transition-all ${copyFeedback ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-200' : 'bg-emerald-800 text-white shadow-xl active:scale-95'}`}>{copyFeedback ? '¡COPIADO!' : 'COPIAR WHATSAPP'}</button>
+               <button onClick={() => copyToClipboard(formatOCWhatsApp(ocSuccess))} className={`w-full py-5 rounded-[2rem] font-black uppercase text-xs flex items-center justify-center gap-3 transition-all ${copyFeedback ? 'bg-emerald-100 text-emerald-800 border-2 border-emerald-200' : 'bg-emerald-800 text-white shadow-xl active:scale-95'}`}>{copyFeedback ? '¡COPIADO!' : 'COPIAR WHATSAPP'}</button>
                <button onClick={() => printOC(ocSuccess)} className="w-full py-5 bg-slate-50 text-slate-500 rounded-[2rem] font-black uppercase text-xs flex items-center justify-center gap-3 active:bg-slate-100 border-2 border-slate-100 shadow-sm transition-all">IMPRIMIR / PDF</button>
             </div>
             <button onClick={() => setOcSuccess(null)} className="mt-8 text-[10px] font-black text-slate-300 uppercase underline tracking-[0.2em]">Cerrar</button>
